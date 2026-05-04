@@ -271,8 +271,8 @@ def vectorizar_conteos(df_per: pd.DataFrame, cols_eval: List[str]) -> pd.DataFra
             "asistencias":0,"porc_asistencia":np.nan,"promedio":np.nan
         })
     vals_raw = df_per[cols_eval].copy()
-    vals_str = vals_raw.astype(str).applymap(lambda x: normalizar_texto(x).upper())
-    vals_num = vals_str.applymap(to_float_safe)
+    vals_str = vals_raw.astype(str).map(lambda x: normalizar_texto(x).upper())
+    vals_num = vals_str.map(to_float_safe)
     m_V  = (vals_str == "V")
     m_F  = (vals_str == "F")
     m_J  = (vals_str == "J")
