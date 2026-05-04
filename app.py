@@ -14,56 +14,6 @@ import streamlit as st
 # =========================
 st.set_page_config(page_title="Dashboard Capacitación TELCOU 2025", layout="wide")
 
-# =========================
-# AUTENTICACIÓN
-# =========================
-def _check_credentials(username: str, password: str) -> bool:
-    try:
-        users = st.secrets["users"]
-        return users.get(username) == password
-    except Exception:
-        return False
-
-def _login_screen():
-    col_l, col_c, col_r = st.columns([1, 1.2, 1])
-    with col_c:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/1px-PNG_transparency_demonstration_1.png", width=1)
-        st.markdown(
-            """
-            <div style='text-align:center; margin-bottom:8px;'>
-                <span style='font-size:2rem; font-weight:800; color:#E31837;'>TELCOU</span><br>
-                <span style='font-size:1rem; color:#aaa;'>Dashboard Capacitación 2025</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        with st.form("login_form"):
-            username = st.text_input("Usuario", placeholder="usuario")
-            password = st.text_input("Contraseña", type="password", placeholder="••••••••")
-            submitted = st.form_submit_button("Ingresar", use_container_width=True)
-            if submitted:
-                if _check_credentials(username, password):
-                    st.session_state["authenticated"] = True
-                    st.session_state["current_user"] = username
-                    st.rerun()
-                else:
-                    st.error("Usuario o contraseña incorrectos.")
-
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-
-if not st.session_state["authenticated"]:
-    _login_screen()
-    st.stop()
-
-# Botón de cerrar sesión en sidebar
-with st.sidebar:
-    st.markdown(f"👤 **{st.session_state.get('current_user', '')}**")
-    if st.button("Cerrar sesión", use_container_width=True):
-        st.session_state["authenticated"] = False
-        st.session_state["current_user"] = ""
-        st.rerun()
 
 # --- Leer secrets de Streamlit Cloud o variables de entorno ---
 def get_cfg(key: str, default: str = "") -> str:
