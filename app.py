@@ -4,6 +4,7 @@ from ui.styles import inject_styles
 from ui.colaboradores import render_tab_colaboradores
 from ui.areas import render_tab_areas
 from ui.analitica import render_tab_analitica
+from ui.convocatoria import render_tab_convocatoria
 
 st.set_page_config(
     page_title="Dashboard Capacitación TELCOU",
@@ -33,7 +34,9 @@ st.title("📊 Dashboard Capacitación Técnica TELCOU")
 st.caption(f"Año **{anio}** · Datos en tiempo real desde telcou-api")
 
 # ── Tabs ──
-tab_colab, tab_area, tab_analitica = st.tabs(["👥 Colaboradores", "🏢 Áreas", "📈 Analítica"])
+tab_colab, tab_area, tab_analitica, tab_convocatoria = st.tabs(
+    ["👥 Colaboradores", "🏢 Áreas", "📈 Analítica", "📧 Convocatoria"]
+)
 
 with tab_colab:
     render_tab_colaboradores(anio)
@@ -43,3 +46,6 @@ with tab_area:
 
 with tab_analitica:
     render_tab_analitica(anio)
+
+with tab_convocatoria:
+    render_tab_convocatoria(anio)
