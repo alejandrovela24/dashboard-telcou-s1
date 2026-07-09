@@ -27,6 +27,33 @@ def _get(path: str, params: dict = None) -> list | dict | None:
         return None
 
 
+def _write(method: str, path: str, json: dict = None, params: dict = None) -> dict | list | None:
+    headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
+    try:
+        r = requests.request(
+            method, f"{_base()}{path}", json=json, params=params, headers=headers, timeout=60,
+        )
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.ConnectionError:
+        st.error("No se puede conectar a la API. Verifica que telcou-api esté corriendo en " + _base())
+        return None
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Error de API ({e.response.status_code}): {e.response.text}")
+        return None
+    except Exception as e:
+        st.error(f"Error inesperado al contactar la API: {e}")
+        return None
+
+
+def _patch(path: str, json: dict) -> dict | None:
+    return _write("PATCH", path, json=json)
+
+
+def _post(path: str, json: dict) -> dict | None:
+    return _write("POST", path, json=json)
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def get_empleados(
     area: Optional[str] = None,
@@ -111,3 +138,49 @@ def get_sucursales(anio: int, regional: str = "TS R2", nombre: Optional[str] = N
     params = {"anio": anio, "regional": regional}
     if nombre: params["nombre"] = nombre
     return _get("/analitica/sucursales", params) or []
+
+
+def get_convocatoria_preview(dia: str, regional: str, semana: str) -> list[dict]:
+    return _get(
+        "/analitica/convocatoria-preview",
+        {"dia": dia, "regional": regional, "semana": semana},
+    ) or []
+
+
+def buscar_supletorios_pendientes(nombre: str, anio: int, regional: Optional[str] = None) -> list[dict]:
+    params = {"nombre": nombre, "anio": anio}
+    if regional:
+        params["regional"] = regional
+    return _get("/analitica/supletorios-pendientes/buscar", params) or []
+
+
+def get_dia_historial(cedula: str) -> list[dict]:
+    return _get(f"/empleados/{quote(cedula, safe='')}/dia-historial") or []
+
+
+def cambiar_dia_empleado(
+    cedula: str,
+    dia_nuevo: str,
+    tipo: str,
+    motivo: str,
+    semana_inicio: Optional[str] = None,
+    editado_por: Optional[str] = None,
+) -> dict | None:
+    body = {"dia_nuevo": dia_nuevo, "tipo": tipo, "motivo": motivo}
+    if semana_inicio:
+        body["semana_inicio"] = semana_inicio
+    if editado_por:
+        body["editado_por"] = editado_por
+    return _patch(f"/empleados/{quote(cedula, safe='')}/dia", body)
+
+
+def enviar_convocatoria(
+    cedulas: list[str],
+    semana: str,
+    modo_prueba: bool,
+    correo_prueba: Optional[str] = None,
+) -> dict | None:
+    body = {"cedulas": cedulas, "semana": semana, "modo_prueba": modo_prueba}
+    if correo_prueba:
+        body["correo_prueba"] = correo_prueba
+    return _post("/admin/enviar-convocatoria", body)
