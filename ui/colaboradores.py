@@ -10,6 +10,7 @@ MESES = [
 ]
 
 ESTADOS_INASISTENCIA = {"FALTA_INJUSTIFICADA", "FALTA_JUSTIFICADA", "VACACIONES"}
+NECESITA_SUPLETORIO = {"REPROBADO", "FALTA_INJUSTIFICADA"}
 
 ESTADO_TIPO_LABEL = {
     "FALTA_INJUSTIFICADA": "F · Falta injustificada",
@@ -89,7 +90,7 @@ def _render_empleado(emp: dict, anio: int, meses_sel: list[str]) -> None:
         m2.metric("Promedio", f"{float(prom):.2f}" if prom is not None else "—")
         m3.metric("Faltas (F)", resumen.get("faltas_injustificadas", 0))
         m4.metric("Justificadas (J)", resumen.get("faltas_justificadas", 0))
-        m5.metric("Supletorios", resumen.get("supletorios", 0))
+        m5.metric("Supletorios Rendidos", resumen.get("supletorios", 0))
 
     # ── Notas del período ──
     with st.spinner("Cargando notas..."):
@@ -214,6 +215,42 @@ def _render_empleado(emp: dict, anio: int, meses_sel: list[str]) -> None:
             st.info("Sin supletorios registrados.")
     else:
         st.info("Sin supletorios registrados.")
+
+    # ── Pendientes de Supletorio ──
+    st.markdown("### ⏳ Pendientes de Supletorio")
+    st.caption(
+        "Cursos reprobados o con falta injustificada donde el empleado **todavía no ha rendido "
+        "ningún supletorio** — a diferencia de Trazabilidad (que solo muestra intentos ya hechos)."
+    )
+    if emp.get("inactivo"):
+        st.info("Empleado inactivo — no aplica.")
+    else:
+        ids_con_supletorio = {
+            n["nota_original_id"] for n in notas
+            if n.get("tipo") == "SUPLETORIO" and n.get("nota_original_id") is not None
+        }
+        pendientes = [
+            n for n in notas_reg
+            if n.get("estado") in NECESITA_SUPLETORIO and n["id"] not in ids_con_supletorio
+        ]
+        if pendientes:
+            rows = []
+            for n in pendientes:
+                rows.append({
+                    "Código": n["curso_codigo"],
+                    "Curso":  n["curso_nombre"],
+                    "Mes":    n.get("mes") or "—",
+                    "Nota":   float(n["valor"]) if n.get("valor") is not None else None,
+                    "Estado": n.get("estado", ""),
+                })
+            df_pend = pd.DataFrame(rows)
+            st.dataframe(
+                style_notas_df(df_pend).format({"Nota": lambda x: f"{x:.2f}" if x is not None else "—"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("Sin supletorios pendientes por rendir.")
 
     # ── Todas las notas regulares ──
     with st.expander("📋 Ver todas las notas del período"):
