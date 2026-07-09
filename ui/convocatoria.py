@@ -74,7 +74,9 @@ def render_tab_convocatoria(anio: int) -> None:
     st.divider()
     _seccion_agregar_por_nombre(anio, regional, dia)
     st.divider()
-    _seccion_envio(preview, semana_inicio, seleccionados)
+    _seccion_envio(preview, semana_inicio, seleccionados, regional, dia)
+    st.divider()
+    _seccion_historial_envios(anio, regional)
 
 
 def _seccion_tabla_convocados(preview: list[dict], dia: str) -> list[str]:
@@ -155,7 +157,10 @@ def _seccion_agregar_por_nombre(anio: int, regional: str, dia: str) -> None:
             _form_cambiar_dia(r["cedula"], r["nombre"], dia, "buscar")
 
 
-def _seccion_envio(preview: list[dict], semana_inicio, cedulas_seleccionadas: list[str]) -> None:
+def _seccion_envio(
+    preview: list[dict], semana_inicio, cedulas_seleccionadas: list[str],
+    regional: str, dia: str,
+) -> None:
     st.markdown("### ✉️ Envío de convocatoria")
 
     if not preview:
@@ -184,6 +189,8 @@ def _seccion_envio(preview: list[dict], semana_inicio, cedulas_seleccionadas: li
                 semana=semana_inicio.isoformat(),
                 modo_prueba=modo_prueba,
                 correo_prueba=correo_prueba,
+                regional=regional,
+                dia=dia,
             )
 
         if resultado:
@@ -193,3 +200,53 @@ def _seccion_envio(preview: list[dict], semana_inicio, cedulas_seleccionadas: li
                 st.error("❌ Fallidos:")
                 for f in resultado["fallidos"]:
                     st.write(f"- {f['nombre'] or f['cedula']}: {f['detalle']}")
+            if resultado.get("recopilatorios_enviados"):
+                st.caption(f"📋 Recopilatorio enviado a {len(resultado['recopilatorios_enviados'])} jefe(s) inmediato(s).")
+            if resultado.get("resumen_ejecutivo_enviado"):
+                st.caption("📊 Resumen ejecutivo enviado a los coordinadores.")
+
+
+def _seccion_historial_envios(anio: int, regional: str) -> None:
+    st.markdown("### 🗂️ Historial de envíos")
+    st.caption("Auditoría de convocatorias ya enviadas (incluye envíos en modo prueba).")
+
+    hf1, hf2 = st.columns(2)
+    with hf1:
+        filtro_regional = st.selectbox(
+            "Regional", ["Todas", "TS R2", "Quito"], key="conv_hist_regional",
+        )
+    with hf2:
+        filtro_modo = st.selectbox(
+            "Modo", ["Todos", "Solo reales", "Solo prueba"], key="conv_hist_modo",
+        )
+
+    if not st.checkbox("Mostrar historial", key="conv_hist_mostrar"):
+        return
+
+    modo_prueba_filtro = None
+    if filtro_modo == "Solo reales":
+        modo_prueba_filtro = False
+    elif filtro_modo == "Solo prueba":
+        modo_prueba_filtro = True
+
+    with st.spinner("Cargando historial…"):
+        historial = api.get_envios_convocatoria(
+            anio=anio,
+            regional=None if filtro_regional == "Todas" else filtro_regional,
+            modo_prueba=modo_prueba_filtro,
+        )
+
+    if not historial:
+        st.info("Sin envíos registrados para estos filtros.")
+        return
+
+    df = pd.DataFrame([{
+        "Fecha":      h["fecha_envio"],
+        "Nombre":     h["nombre"],
+        "Cédula":     h["cedula"],
+        "Regional":   h["regional"],
+        "Curso":      h["curso"],
+        "Modo":       "🧪 Prueba" if h["modo_prueba"] else "✅ Real",
+        "Enviado por": h["enviado_por"] or "—",
+    } for h in historial])
+    st.dataframe(df, use_container_width=True, hide_index=True)

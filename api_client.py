@@ -27,6 +27,23 @@ def _get(path: str, params: dict = None) -> list | dict | None:
         return None
 
 
+def _get_admin(path: str, params: dict = None) -> list | dict | None:
+    headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
+    try:
+        r = requests.get(f"{_base()}{path}", params=params, headers=headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.ConnectionError:
+        st.error("No se puede conectar a la API. Verifica que telcou-api esté corriendo en " + _base())
+        return None
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Error de API ({e.response.status_code}): {e.response.text}")
+        return None
+    except Exception as e:
+        st.error(f"Error inesperado al contactar la API: {e}")
+        return None
+
+
 def _write(method: str, path: str, json: dict = None, params: dict = None) -> dict | list | None:
     headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
     try:
@@ -179,8 +196,29 @@ def enviar_convocatoria(
     semana: str,
     modo_prueba: bool,
     correo_prueba: Optional[str] = None,
+    regional: Optional[str] = None,
+    dia: Optional[str] = None,
 ) -> dict | None:
     body = {"cedulas": cedulas, "semana": semana, "modo_prueba": modo_prueba}
     if correo_prueba:
         body["correo_prueba"] = correo_prueba
+    if regional:
+        body["regional"] = regional
+    if dia:
+        body["dia"] = dia
     return _post("/admin/enviar-convocatoria", body)
+
+
+def get_envios_convocatoria(
+    anio: Optional[int] = None,
+    regional: Optional[str] = None,
+    modo_prueba: Optional[bool] = None,
+) -> list[dict]:
+    params: dict = {}
+    if anio is not None:
+        params["anio"] = anio
+    if regional:
+        params["regional"] = regional
+    if modo_prueba is not None:
+        params["modo_prueba"] = modo_prueba
+    return _get_admin("/analitica/envios-convocatoria", params) or []
