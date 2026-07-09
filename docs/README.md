@@ -33,10 +33,11 @@ dashboard-telcou-s1/
 │   ├── styles.py             # CSS global, colores por estado, función badge()
 │   ├── colaboradores.py      # Tab "Colaboradores"
 │   ├── areas.py              # Tab "Áreas"
-│   └── analitica.py          # Tab "Analítica" (nuevo)
+│   ├── analitica.py          # Tab "Analítica"
+│   └── convocatoria.py       # Tab "Convocatoria" (nuevo — 2026-07-09)
 ├── .streamlit/
 │   ├── config.toml           # Tema visual (azul oscuro #0F1623 + teal #00A8A8)
-│   └── secrets.toml          # API_BASE_URL (no commitear)
+│   └── secrets.toml          # API_BASE_URL, ADMIN_TOKEN (no commitear)
 └── docs/
     ├── README.md             # Este archivo
     └── superpowers/plans/    # Planes de implementación
@@ -70,6 +71,19 @@ Busca empleados por nombre. Para cada uno muestra:
 
 > Año 2026 agregado al selector del sidebar (antes solo 2025/2024/2023). Con datos reales ya cargados (empleados, notas y supletorios pendientes para TS R2; Quito aún sin supletorios pendientes 2026 registrados).
 
+### 📧 Convocatoria (nuevo — 2026-07-09)
+
+Ventana para gestionar el día de capacitación de cada empleado y para enviar convocatorias de supletorio por correo. Solo TS R2 tiene datos hoy (`día`/`correo` vienen de `variables_adicionales`, poblada desde el Excel de Israel — ver `TelcoU DB API`).
+
+- **Filtros:** Regional (TS R2 / Quito) · Día (LUNES-VIERNES) · Semana → botón "Cargar convocatoria del día"
+- **Tabla principal:** convocados de ese día (día efectivo — ver más abajo), con sus cursos pendientes (nombre, nota, link), si tienen correo registrado, y si ya se les envió antes. Cada fila tiene una acción **"Cambiar día"**.
+- **Cambiar día** (por fila, o desde el buscador): formulario con día nuevo, tipo (`SEMANAL` = solo esa semana, vuelve a su día normal después; `PERMANENTE` = cambia su día de base), motivo, editado por (opcional). Con trazabilidad completa (`GET /empleados/{cedula}/dia-historial`).
+- **"Día efectivo"**: si el empleado tiene una excepción `SEMANAL` vigente para la semana consultada, se usa ese día; si no, se usa su día base (`variables_adicionales.dia`).
+- **Buscador "Agregar por nombre":** busca solo entre empleados con supletorio pendiente (de cualquier día), para agregarlos al día que se está armando.
+- **Envío:** checkbox por persona (marcado por defecto) · toggle **"Modo prueba"** (por defecto ON — hay que apagarlo conscientemente para un envío real; en modo prueba todos los correos de la tanda se redirigen al correo de prueba, con el nombre real del destinatario visible en el cuerpo) · botón "Confirmar y enviar" → resumen final (enviados/fallidos).
+
+> **Verificado en producción (2026-07-09):** un envío real en modo prueba a un empleado real de TS R2 llegó correctamente redirigido a `telcou_aut@telconet.ec` (no al correo real del empleado), registrando 4 filas en `envios_convocatoria` con `modo_prueba=True` sin marcar al empleado como "ya enviado" (los envíos de prueba no cuentan como notificación real).
+
 ---
 
 ## Colores de estado
@@ -101,10 +115,17 @@ Busca empleados por nombre. Para cada uno muestra:
 | `get_sucursales(anio, regional, nombre)` | `GET /analitica/sucursales` | Stats por ciudad dentro de una regional — `nombre` (2026-07-01) filtra por capacitación seleccionada |
 | `get_listado_cursos(anio, mes, nombre)` | `GET /analitica/listado-cursos` | Stats por capacitación con desglose Quito/R2 |
 | `get_supletorios_pendientes(anio, regional, curso, sucursal)` | `GET /analitica/supletorios-pendientes` | Listado detallado por empleado de supletorios pendientes (2026-07-07) |
+| `get_convocatoria_preview(dia, regional, semana)` | `GET /analitica/convocatoria-preview` | Convocados de un día/regional/semana, con cursos pendientes, correo y estado de envío (2026-07-09) |
+| `buscar_supletorios_pendientes(nombre, anio, regional)` | `GET /analitica/supletorios-pendientes/buscar` | Búsqueda por nombre entre pendientes, para el buscador "Agregar por nombre" (2026-07-09) |
+| `get_dia_historial(cedula)` | `GET /empleados/{cedula}/dia-historial` | Trazabilidad de cambios de día de un empleado (2026-07-09) |
+| `cambiar_dia_empleado(cedula, dia_nuevo, tipo, motivo, semana_inicio, editado_por)` | `PATCH /empleados/{cedula}/dia` | Cambia el día de capacitación (permanente o solo-una-semana) (2026-07-09) |
+| `enviar_convocatoria(cedulas, semana, modo_prueba, correo_prueba)` | `POST /admin/enviar-convocatoria` | Envía correos de convocatoria a supletorio, con modo prueba (2026-07-09) |
 
-Todas las funciones usan `@st.cache_data(ttl=900)`. Para refrescar manualmente: botón "Limpiar caché" en el sidebar.
+Todas las funciones usan `@st.cache_data(ttl=900)`, **excepto** las 5 nuevas de arriba (`get_convocatoria_preview` en adelante) — son escrituras o lecturas sensibles a cambios recientes, no se cachean. Para refrescar manualmente las que sí cachean: botón "Limpiar caché" en el sidebar.
 
-Timeout de requests: 30s (subido de 10s — `listado-cursos` procesa ~77k notas y puede tardar unos segundos en frío).
+Timeout de requests: 30s en lecturas (`_get`), 60s en escrituras (`_patch`/`_post`, usadas por la tab Convocatoria — el envío de correos puede tardar más).
+
+Las escrituras (`PATCH`/`POST`) requieren `ADMIN_TOKEN` en `.streamlit/secrets.toml`, enviado como header `X-Admin-Token` — debe coincidir con `ADMIN_TOKEN` en el `.env` de `telcou-api`.
 
 ---
 
@@ -114,6 +135,12 @@ Timeout de requests: 30s (subido de 10s — `listado-cursos` procesa ~77k notas 
 - **Path/query injection:** la cédula se URL-encodea con `urllib.parse.quote(cedula, safe='')` en `api_client.py` antes de interpolarla en la ruta (`/empleados/{cedula}/...`)
 - **Timeout:** subido de 10s a 30s en `_get()` para evitar cortes prematuros en `listado-cursos`
 - **`enableXsrfProtection`**: en `false` en `.streamlit/config.toml` — alineado intencionalmente así porque Streamlit Cloud maneja su propio proxy/CSRF; no reactivar sin probar en producción primero
+
+### Seguridad (feature Convocatoria, 2026-07-09)
+
+- Las escrituras (`PATCH /empleados/{cedula}/dia`, `POST /admin/enviar-convocatoria`) requieren `X-Admin-Token` en la API — el dashboard lo manda desde `.streamlit/secrets.toml`, nunca queda expuesto al navegador (Streamlit lo mantiene server-side)
+- El envío real de correo usa credenciales SMTP reales (`smtp.telconet.ec`) que viven solo en `.env` de `telcou-api` (gitignoreado) — la contraseña se reutilizó de una cuenta ya validada en otro proyecto interno que la tenía hardcodeada en texto plano; pendiente rotarla
+- **Modo prueba por defecto ON** en la UI — hay que apagarlo conscientemente para un envío real; es la salvaguarda principal contra enviar correos a empleados reales por error durante pruebas
 
 ---
 
