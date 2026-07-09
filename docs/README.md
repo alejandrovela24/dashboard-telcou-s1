@@ -82,8 +82,13 @@ Ventana para gestionar el día de capacitación de cada empleado y para enviar c
 - **"Día efectivo"**: si el empleado tiene una excepción `SEMANAL` vigente para la semana consultada, se usa ese día; si no, se usa su día base (`variables_adicionales.dia`).
 - **Buscador "Agregar por nombre":** busca solo entre empleados con supletorio pendiente (de cualquier día), para agregarlos al día que se está armando.
 - **Envío:** lee la selección directo de la columna "Enviar" de la tabla de arriba (ya no duplica la lista) · toggle **"Modo prueba"** (por defecto ON — hay que apagarlo conscientemente para un envío real; en modo prueba todos los correos de la tanda se redirigen al correo de prueba, con el nombre real del destinatario visible en el cuerpo) · botón "Confirmar y enviar" → resumen final (enviados/fallidos).
+- **Plantilla de correo rediseñada (2026-07-09):** los 3 tipos de correo (individual, recopilatorio, resumen ejecutivo) usan un layout de tabla con inline styles compatible con Outlook/Zimbra (sin CSS moderno tipo flexbox/grid), con cabecera de marca TELCOU. Antes era texto plano sin estilo.
+- **Recopilatorio al jefe inmediato (nuevo — 2026-07-09):** por cada envío, si el empleado tiene `jefe_correo` registrado en `variables_adicionales`, se agrupan todos sus colaboradores convocados en esa tanda y se le manda **un solo correo** (no uno por empleado) con el listado de quién fue convocado y a qué cursos. La UI muestra un caption "📋 Recopilatorio enviado a N jefe(s)" tras el envío.
+- **Resumen ejecutivo a coordinación (nuevo — 2026-07-09):** al final de cada tanda de envío (si hubo al menos un enviado o un fallido) se manda un resumen ejecutivo (regional, día, semana, total enviados/fallidos, detalle de fallidos) a una lista fija de coordinadores, configurada en `telcou-api/.env` como `COORDINADOR_EMAILS` (hoy: `mharo@telconet.ec, telcou_uio@telconet.ec`). La UI muestra "📊 Resumen ejecutivo enviado a los coordinadores".
+- **Modo prueba cubre los 3 correos:** individual, recopilatorio y resumen ejecutivo se redirigen todos al correo de prueba cuando el toggle está activo — ninguno de los tres llega a un destinatario real durante pruebas.
+- **Historial de envíos (nuevo — 2026-07-09):** sección de auditoría de solo lectura al final de la tab, con filtros por Regional y Modo (reales/prueba/todos) tras marcar "Mostrar historial". Consume `GET /analitica/envios-convocatoria` (protegido por `X-Admin-Token`, nunca expuesto sin token) — el dashboard no tiene ni necesita acceso directo a la base de datos, todo pasa por la API.
 
-> **Verificado en producción (2026-07-09):** un envío real en modo prueba a un empleado real de TS R2 llegó correctamente redirigido a `telcou_aut@telconet.ec` (no al correo real del empleado), registrando 4 filas en `envios_convocatoria` con `modo_prueba=True` sin marcar al empleado como "ya enviado" (los envíos de prueba no cuentan como notificación real).
+> **Verificado en producción (2026-07-09):** un envío real en modo prueba a un empleado real de TS R2 llegó correctamente redirigido a `telcou_aut@telconet.ec` (no al correo real del empleado), registrando 4 filas en `envios_convocatoria` con `modo_prueba=True` sin marcar al empleado como "ya enviado" (los envíos de prueba no cuentan como notificación real). Verificado también el flujo completo de recopilatorio + resumen ejecutivo (envío real en modo prueba con jefe_correo poblado): 3 correos SMTP reales enviados, todos redirigidos correctamente al correo de prueba.
 
 ---
 
@@ -120,9 +125,12 @@ Ventana para gestionar el día de capacitación de cada empleado y para enviar c
 | `buscar_supletorios_pendientes(nombre, anio, regional)` | `GET /analitica/supletorios-pendientes/buscar` | Búsqueda por nombre entre pendientes, para el buscador "Agregar por nombre" (2026-07-09) |
 | `get_dia_historial(cedula)` | `GET /empleados/{cedula}/dia-historial` | Trazabilidad de cambios de día de un empleado (2026-07-09) |
 | `cambiar_dia_empleado(cedula, dia_nuevo, tipo, motivo, semana_inicio, editado_por)` | `PATCH /empleados/{cedula}/dia` | Cambia el día de capacitación (permanente o solo-una-semana) (2026-07-09) |
-| `enviar_convocatoria(cedulas, semana, modo_prueba, correo_prueba)` | `POST /admin/enviar-convocatoria` | Envía correos de convocatoria a supletorio, con modo prueba (2026-07-09) |
+| `enviar_convocatoria(cedulas, semana, modo_prueba, correo_prueba, regional, dia)` | `POST /admin/enviar-convocatoria` | Envía correos de convocatoria a supletorio, con modo prueba, recopilatorio al jefe y resumen ejecutivo a coordinación (2026-07-09) |
+| `get_envios_convocatoria(anio, regional, modo_prueba)` | `GET /analitica/envios-convocatoria` | Historial/auditoría de convocatorias ya enviadas, protegido por `X-Admin-Token` (2026-07-09) |
 
-Todas las funciones usan `@st.cache_data(ttl=900)`, **excepto** las 5 nuevas de arriba (`get_convocatoria_preview` en adelante) — son escrituras o lecturas sensibles a cambios recientes, no se cachean. Para refrescar manualmente las que sí cachean: botón "Limpiar caché" en el sidebar.
+Todas las funciones usan `@st.cache_data(ttl=900)`, **excepto** las 6 nuevas de arriba (`get_convocatoria_preview` en adelante) — son escrituras o lecturas sensibles a cambios recientes, no se cachean. Para refrescar manualmente las que sí cachean: botón "Limpiar caché" en el sidebar.
+
+`get_envios_convocatoria` usa un helper nuevo, `_get_admin()` en `api_client.py` — igual que `_get()` pero manda `X-Admin-Token`, porque el endpoint de auditoría es de lectura pero sigue protegido (no se expone historial de envíos sin token).
 
 Timeout de requests: 30s en lecturas (`_get`), 60s en escrituras (`_patch`/`_post`, usadas por la tab Convocatoria — el envío de correos puede tardar más).
 
@@ -139,9 +147,10 @@ Las escrituras (`PATCH`/`POST`) requieren `ADMIN_TOKEN` en `.streamlit/secrets.t
 
 ### Seguridad (feature Convocatoria, 2026-07-09)
 
-- Las escrituras (`PATCH /empleados/{cedula}/dia`, `POST /admin/enviar-convocatoria`) requieren `X-Admin-Token` en la API — el dashboard lo manda desde `.streamlit/secrets.toml`, nunca queda expuesto al navegador (Streamlit lo mantiene server-side)
+- Las escrituras (`PATCH /empleados/{cedula}/dia`, `POST /admin/enviar-convocatoria`) y el nuevo endpoint de auditoría (`GET /analitica/envios-convocatoria`) requieren `X-Admin-Token` en la API — el dashboard lo manda desde `.streamlit/secrets.toml`, nunca queda expuesto al navegador (Streamlit lo mantiene server-side)
 - El envío real de correo usa credenciales SMTP reales (`smtp.telconet.ec`) que viven solo en `.env` de `telcou-api` (gitignoreado) — la contraseña se reutilizó de una cuenta ya validada en otro proyecto interno que la tenía hardcodeada en texto plano; pendiente rotarla
-- **Modo prueba por defecto ON** en la UI — hay que apagarlo conscientemente para un envío real; es la salvaguarda principal contra enviar correos a empleados reales por error durante pruebas
+- **Modo prueba por defecto ON** en la UI — hay que apagarlo conscientemente para un envío real; es la salvaguarda principal contra enviar correos a empleados reales por error durante pruebas. Cubre los 3 correos de una tanda (individual, recopilatorio al jefe, resumen ejecutivo a coordinación), no solo el correo al empleado
+- El historial de envíos (auditoría) es de solo lectura, no expone nada sin token, y el dashboard nunca se conecta directo a la base de datos — todo pasa por la API, por diseño (evita duplicar lógica de acceso a datos y mantiene un único punto de control de permisos)
 
 ---
 
