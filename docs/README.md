@@ -50,9 +50,10 @@ dashboard-telcou-s1/
 ### 👥 Colaboradores
 Busca empleados por nombre. Para cada uno muestra:
 - Datos personales (área, jefe, regional, estado activo/inactivo)
-- Métricas: total capacitaciones, promedio, faltas, supletorios
+- Métricas: total capacitaciones, promedio, faltas, **Supletorios Rendidos** (renombrado 2026-07-09 — antes decía solo "Supletorios" y se prestaba a confusión con los pendientes)
 - Inasistencias y vacaciones (tabla coloreada)
-- **Trazabilidad de supletorios** (tabla horizontal)
+- **Trazabilidad de supletorios** (tabla horizontal) — solo muestra cursos donde **ya se intentó** un supletorio
+- **Pendientes de Supletorio** (nuevo — 2026-07-09) — cursos reprobados/falta injustificada donde **todavía no se ha rendido ningún** supletorio (calculado en el cliente a partir de las notas ya cargadas, sin llamada extra a la API). Antes esto no se mostraba en ningún lado de esta tab, dando la falsa impresión de que el empleado no tenía nada pendiente
 - Todas las notas regulares del período (expander)
 
 ### 🏢 Áreas
@@ -76,11 +77,11 @@ Busca empleados por nombre. Para cada uno muestra:
 Ventana para gestionar el día de capacitación de cada empleado y para enviar convocatorias de supletorio por correo. Solo TS R2 tiene datos hoy (`día`/`correo` vienen de `variables_adicionales`, poblada desde el Excel de Israel — ver `TelcoU DB API`).
 
 - **Filtros:** Regional (TS R2 / Quito) · Día (LUNES-VIERNES) · Semana → botón "Cargar convocatoria del día"
-- **Tabla principal:** convocados de ese día (día efectivo — ver más abajo), con sus cursos pendientes (nombre, nota, link), si tienen correo registrado, y si ya se les envió antes. Cada fila tiene una acción **"Cambiar día"**.
-- **Cambiar día** (por fila, o desde el buscador): formulario con día nuevo, tipo (`SEMANAL` = solo esa semana, vuelve a su día normal después; `PERMANENTE` = cambia su día de base), motivo, editado por (opcional). Con trazabilidad completa (`GET /empleados/{cedula}/dia-historial`).
+- **Tabla principal (nuevo — 2026-07-09, `st.data_editor`):** convocados de ese día (día efectivo — ver más abajo), con columna **"Enviar"** (checkbox editable, integrado en la misma tabla — antes era una lista aparte de 60-100 checkboxes, ilegible), cursos pendientes (nombre, nota), correo registrado, y si ya se les envió antes. Botones **"Seleccionar todos"** / **"Ninguno"** arriba de la tabla.
+- **Cambiar día:** ya no es un botón por fila (con 60-100 filas era inmanejable) — un selector único **"Cambiar día de un convocado"** debajo de la tabla, o desde el buscador. Formulario: día nuevo, tipo (`SEMANAL` = solo esa semana, vuelve a su día normal después; `PERMANENTE` = cambia su día de base), motivo, editado por (opcional). Con trazabilidad completa (`GET /empleados/{cedula}/dia-historial`).
 - **"Día efectivo"**: si el empleado tiene una excepción `SEMANAL` vigente para la semana consultada, se usa ese día; si no, se usa su día base (`variables_adicionales.dia`).
 - **Buscador "Agregar por nombre":** busca solo entre empleados con supletorio pendiente (de cualquier día), para agregarlos al día que se está armando.
-- **Envío:** checkbox por persona (marcado por defecto) · toggle **"Modo prueba"** (por defecto ON — hay que apagarlo conscientemente para un envío real; en modo prueba todos los correos de la tanda se redirigen al correo de prueba, con el nombre real del destinatario visible en el cuerpo) · botón "Confirmar y enviar" → resumen final (enviados/fallidos).
+- **Envío:** lee la selección directo de la columna "Enviar" de la tabla de arriba (ya no duplica la lista) · toggle **"Modo prueba"** (por defecto ON — hay que apagarlo conscientemente para un envío real; en modo prueba todos los correos de la tanda se redirigen al correo de prueba, con el nombre real del destinatario visible en el cuerpo) · botón "Confirmar y enviar" → resumen final (enviados/fallidos).
 
 > **Verificado en producción (2026-07-09):** un envío real en modo prueba a un empleado real de TS R2 llegó correctamente redirigido a `telcou_aut@telconet.ec` (no al correo real del empleado), registrando 4 filas en `envios_convocatoria` con `modo_prueba=True` sin marcar al empleado como "ya enviado" (los envíos de prueba no cuentan como notificación real).
 
