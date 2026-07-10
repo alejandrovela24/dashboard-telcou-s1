@@ -41,6 +41,11 @@ def _form_cambiar_dia(cedula: str, nombre: str, dia_sugerido: str, key_prefix: s
 
 
 def render_tab_convocatoria(anio: int) -> None:
+    # Convocatoria es un flujo semanal, no anual: el año efectivo sale de la
+    # "Semana" seleccionada abajo, no del selector de Año global (ese solo
+    # tiene sentido para Colaboradores/Analítica). El parámetro `anio` se
+    # ignora a propósito para mantener la firma uniforme con las otras
+    # secciones en app.py.
     st.title("📧 Convocatoria a Supletorios")
 
     fc1, fc2, fc3 = st.columns(3)
@@ -52,6 +57,7 @@ def render_tab_convocatoria(anio: int) -> None:
         semana_sel = st.date_input("Semana", value=date.today(), key="conv_semana")
 
     semana_inicio = _lunes_de_semana(semana_sel)
+    anio_efectivo = semana_inicio.year
 
     if st.button("Cargar convocatoria del día", type="primary"):
         st.session_state["conv_cargado"] = True
@@ -72,11 +78,11 @@ def render_tab_convocatoria(anio: int) -> None:
         seleccionados = _seccion_tabla_convocados(preview, dia)
 
     st.divider()
-    _seccion_agregar_por_nombre(anio, regional, dia)
+    _seccion_agregar_por_nombre(anio_efectivo, regional, dia)
     st.divider()
     _seccion_envio(preview, semana_inicio, seleccionados, regional, dia)
     st.divider()
-    _seccion_historial_envios(anio, regional)
+    _seccion_historial_envios(anio_efectivo, regional)
 
 
 def _seccion_tabla_convocados(preview: list[dict], dia: str) -> list[str]:
