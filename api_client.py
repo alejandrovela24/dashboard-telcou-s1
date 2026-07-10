@@ -152,6 +152,11 @@ def get_convocatoria_preview(dia: str, regional: str, semana: str) -> list[dict]
     ) or []
 
 
+def get_regional_dia_configurado(regional: str) -> bool:
+    resultado = _get("/analitica/regional-dia-configurado", {"regional": regional})
+    return bool(resultado and resultado.get("configurado"))
+
+
 def buscar_supletorios_pendientes(nombre: str, anio: int, regional: Optional[str] = None) -> list[dict]:
     params = {"nombre": nombre, "anio": anio}
     if regional:

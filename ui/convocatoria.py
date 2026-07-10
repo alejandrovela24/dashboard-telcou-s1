@@ -72,7 +72,15 @@ def render_tab_convocatoria(anio: int) -> None:
     st.markdown(f"### Convocados — {dia}, semana del {semana_inicio.strftime('%d/%m/%Y')}")
 
     if not preview:
-        st.info("Nadie tiene día efectivo = " + dia + " en " + regional + " para esta semana.")
+        if api.get_regional_dia_configurado(regional):
+            st.info("Nadie tiene día efectivo = " + dia + " en " + regional + " para esta semana.")
+        else:
+            st.warning(
+                f"⚠️ **{regional}** todavía no tiene cargado el día de capacitación por colaborador "
+                "— por eso no aparece nadie convocado en ningún día para esta regional. No es que "
+                "no haya pendientes (si los hay, se pueden agregar manualmente con el buscador "
+                "'Agregar por nombre' de abajo)."
+            )
         seleccionados: list[str] = []
     else:
         seleccionados = _seccion_tabla_convocados(preview, dia)
