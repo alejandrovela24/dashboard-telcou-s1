@@ -27,14 +27,13 @@ Abre `http://localhost:8501` en el navegador.
 
 ```
 dashboard-telcou-s1/
-├── app.py                    # Entry point — configura página y tabs
+├── app.py                    # Entry point — configura página, navegación en sidebar y selector de año
 ├── api_client.py             # Todas las llamadas a la API con caché
 ├── ui/
 │   ├── styles.py             # CSS global, colores por estado, función badge()
-│   ├── colaboradores.py      # Tab "Colaboradores"
-│   ├── areas.py              # Tab "Áreas"
-│   ├── analitica.py          # Tab "Analítica"
-│   └── convocatoria.py       # Tab "Convocatoria" (nuevo — 2026-07-09)
+│   ├── colaboradores.py      # Sección "Colaboradores"
+│   ├── analitica.py          # Sección "Analítica"
+│   └── convocatoria.py       # Sección "Convocatoria" (nuevo — 2026-07-09)
 ├── .streamlit/
 │   ├── config.toml           # Tema visual (azul oscuro #0F1623 + teal #00A8A8)
 │   └── secrets.toml          # API_BASE_URL, ADMIN_TOKEN (no commitear)
@@ -45,7 +44,13 @@ dashboard-telcou-s1/
 
 ---
 
-## Tabs del dashboard
+## Navegación (rediseñado — 2026-07-10)
+
+La navegación entre secciones vive en el **sidebar** (antes eran tabs horizontales arriba del contenido) — `st.radio` con las 3 secciones: Colaboradores, Analítica, Convocatoria. La tab **"Áreas" se eliminó** (`ui/areas.py` y las funciones `api_client.get_areas()`/`get_regionales()` fueron borradas, no solo ocultadas — no aportaba valor sobre lo que ya cubre Analítica).
+
+Donde antes estaban las tabs (arriba del título) ahora está el **selector de Año** (`st.radio` horizontal: 2026 / 2025 / 2024 / 2023). Hoy solo hay datos reales cargados para 2025 (completo) y 2026 (parcial); 2024 y años anteriores se cargarán más adelante.
+
+## Secciones del dashboard
 
 ### 👥 Colaboradores
 Busca empleados por nombre. Para cada uno muestra:
@@ -55,11 +60,6 @@ Busca empleados por nombre. Para cada uno muestra:
 - **Trazabilidad de supletorios** (tabla horizontal) — solo muestra cursos donde **ya se intentó** un supletorio
 - **Pendientes de Supletorio** (nuevo — 2026-07-09) — cursos reprobados/falta injustificada donde **todavía no se ha rendido ningún** supletorio (calculado en el cliente a partir de las notas ya cargadas, sin llamada extra a la API). Antes esto no se mostraba en ningún lado de esta tab, dando la falsa impresión de que el empleado no tenía nada pendiente
 - Todas las notas regulares del período (expander)
-
-### 🏢 Áreas
-- Estadísticas agregadas por área organizacional
-- Estadísticas por regional (Quito / TS R2)
-- Estadísticas por sucursal dentro de TS R2
 
 ### 📈 Analítica
 - **% Aprobados global (fix 2026-07-01):** el header mostraba 68.5% vs el 85.7% real de la tabla principal, porque el denominador incluía NUEVO/CAMBIO/SALIO (empleados no convocados a ese curso). Ahora `convocados = total - na` en ambos lados y coinciden
@@ -116,8 +116,6 @@ Ventana para gestionar el día de capacitación de cada empleado y para enviar c
 | `get_notas_empleado(cedula, anio, mes, regional)` | `GET /empleados/{cedula}/notas` | Notas del empleado |
 | `get_resumen_empleado(cedula, anio)` | `GET /empleados/{cedula}/resumen` | Métricas del empleado |
 | `get_trazabilidad_empleado(cedula, anio)` | `GET /empleados/{cedula}/trazabilidad` | Cadena REGULAR→SUPLE1→SUPLE2 por curso |
-| `get_areas(anio, regional)` | `GET /analitica/areas` | Stats por área |
-| `get_regionales(anio)` | `GET /analitica/regionales` | Stats por regional |
 | `get_sucursales(anio, regional, nombre)` | `GET /analitica/sucursales` | Stats por ciudad dentro de una regional — `nombre` (2026-07-01) filtra por capacitación seleccionada |
 | `get_listado_cursos(anio, mes, nombre)` | `GET /analitica/listado-cursos` | Stats por capacitación con desglose Quito/R2 |
 | `get_supletorios_pendientes(anio, regional, curso, sucursal)` | `GET /analitica/supletorios-pendientes` | Listado detallado por empleado de supletorios pendientes (2026-07-07) |

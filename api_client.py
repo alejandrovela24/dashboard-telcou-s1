@@ -139,18 +139,6 @@ def get_supletorios_pendientes(
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def get_areas(anio: int, regional: Optional[str] = None) -> list[dict]:
-    params = {"anio": anio}
-    if regional: params["regional"] = regional
-    return _get("/analitica/areas", params) or []
-
-
-@st.cache_data(ttl=900, show_spinner=False)
-def get_regionales(anio: int) -> list[dict]:
-    return _get("/analitica/regionales", {"anio": anio}) or []
-
-
-@st.cache_data(ttl=900, show_spinner=False)
 def get_sucursales(anio: int, regional: str = "TS R2", nombre: Optional[str] = None) -> list[dict]:
     params = {"anio": anio, "regional": regional}
     if nombre: params["nombre"] = nombre

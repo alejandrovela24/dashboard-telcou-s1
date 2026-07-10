@@ -2,7 +2,6 @@ import streamlit as st
 
 from ui.styles import inject_styles
 from ui.colaboradores import render_tab_colaboradores
-from ui.areas import render_tab_areas
 from ui.analitica import render_tab_analitica
 from ui.convocatoria import render_tab_convocatoria
 
@@ -14,13 +13,19 @@ st.set_page_config(
 
 inject_styles()
 
-# ── Sidebar ──
+SECCIONES = {
+    "👥 Colaboradores": render_tab_colaboradores,
+    "📈 Analítica": render_tab_analitica,
+    "📧 Convocatoria": render_tab_convocatoria,
+}
+
+# ── Sidebar: navegación ──
 with st.sidebar:
     st.markdown("# TELCOU")
     st.markdown("### Dashboard Capacitación")
     st.divider()
 
-    anio = st.selectbox("Año", options=[2026, 2025, 2024, 2023], index=0)
+    seccion = st.radio("Navegación", options=list(SECCIONES.keys()), label_visibility="collapsed")
 
     st.divider()
     st.caption("Fuente: telcou-api · PostgreSQL")
@@ -31,21 +36,14 @@ with st.sidebar:
 
 # ── Header ──
 st.title("📊 Dashboard Capacitación Técnica TELCOU")
+
+# ── Selector de año (arriba del contenido) ──
+AÑOS_DISPONIBLES = [2026, 2025, 2024, 2023]
+anio = st.radio(
+    "Año", options=AÑOS_DISPONIBLES, horizontal=True, label_visibility="collapsed",
+)
 st.caption(f"Año **{anio}** · Datos en tiempo real desde telcou-api")
 
-# ── Tabs ──
-tab_colab, tab_area, tab_analitica, tab_convocatoria = st.tabs(
-    ["👥 Colaboradores", "🏢 Áreas", "📈 Analítica", "📧 Convocatoria"]
-)
+st.divider()
 
-with tab_colab:
-    render_tab_colaboradores(anio)
-
-with tab_area:
-    render_tab_areas(anio)
-
-with tab_analitica:
-    render_tab_analitica(anio)
-
-with tab_convocatoria:
-    render_tab_convocatoria(anio)
+SECCIONES[seccion](anio)
