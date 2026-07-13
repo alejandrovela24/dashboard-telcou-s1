@@ -172,6 +172,10 @@ def get_reporte_pendientes_excel(anio: int) -> bytes | None:
     return _get_bytes("/analitica/reporte-supletorios-pendientes", {"anio": anio})
 
 
+def get_reporte_pendientes_html(anio: int) -> bytes | None:
+    return _get_bytes("/analitica/reporte-supletorios-pendientes-html", {"anio": anio})
+
+
 def get_regional_dia_configurado(regional: str) -> bool:
     resultado = _get("/analitica/regional-dia-configurado", {"regional": regional})
     return bool(resultado and resultado.get("configurado"))
