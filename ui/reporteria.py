@@ -9,8 +9,8 @@ def render_tab_reporteria(anio: int) -> None:
     st.markdown("### Supletorios pendientes")
     st.caption(
         "Descarga un Excel con los colaboradores que tienen supletorio pendiente en el año "
-        f"**{anio}** — una fila por colaborador, una columna por curso pendiente, con hojas "
-        "separadas para Quito y TS R2."
+        f"**{anio}** — una fila por colaborador y curso pendiente (cédula, nombre, área, sucursal, "
+        "tema, fechas, link de Moodle y nota), con hojas separadas para Quito y TS R2."
     )
 
     with st.spinner("Generando reporte…"):
