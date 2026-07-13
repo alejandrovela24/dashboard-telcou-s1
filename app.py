@@ -4,6 +4,7 @@ from ui.styles import inject_styles
 from ui.colaboradores import render_tab_colaboradores
 from ui.analitica import render_tab_analitica
 from ui.convocatoria import render_tab_convocatoria
+from ui.reporteria import render_tab_reporteria
 
 st.set_page_config(
     page_title="Dashboard Capacitación TELCOU",
@@ -17,6 +18,7 @@ SECCIONES = {
     "👥 Colaboradores": render_tab_colaboradores,
     "📈 Analítica": render_tab_analitica,
     "📧 Convocatoria": render_tab_convocatoria,
+    "📥 Reportería": render_tab_reporteria,
 }
 
 # ── Sidebar: navegación ──

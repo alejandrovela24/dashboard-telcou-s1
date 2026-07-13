@@ -44,6 +44,22 @@ def _get_admin(path: str, params: dict = None) -> list | dict | None:
         return None
 
 
+def _get_bytes(path: str, params: dict = None) -> bytes | None:
+    try:
+        r = requests.get(f"{_base()}{path}", params=params, timeout=60)
+        r.raise_for_status()
+        return r.content
+    except requests.exceptions.ConnectionError:
+        st.error("No se puede conectar a la API. Verifica que telcou-api esté corriendo en " + _base())
+        return None
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Error de API ({e.response.status_code}): {e.response.text}")
+        return None
+    except Exception as e:
+        st.error(f"Error inesperado al contactar la API: {e}")
+        return None
+
+
 def _write(method: str, path: str, json: dict = None, params: dict = None) -> dict | list | None:
     headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
     try:
@@ -150,6 +166,10 @@ def get_convocatoria_preview(dia: str, regional: str, semana: str) -> list[dict]
         "/analitica/convocatoria-preview",
         {"dia": dia, "regional": regional, "semana": semana},
     ) or []
+
+
+def get_reporte_pendientes_excel(anio: int) -> bytes | None:
+    return _get_bytes("/analitica/reporte-supletorios-pendientes", {"anio": anio})
 
 
 def get_regional_dia_configurado(regional: str) -> bool:
