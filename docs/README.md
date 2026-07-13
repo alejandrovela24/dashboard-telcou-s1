@@ -33,7 +33,8 @@ dashboard-telcou-s1/
 │   ├── styles.py             # CSS global, colores por estado, función badge()
 │   ├── colaboradores.py      # Sección "Colaboradores"
 │   ├── analitica.py          # Sección "Analítica"
-│   └── convocatoria.py       # Sección "Convocatoria" (nuevo — 2026-07-09)
+│   ├── convocatoria.py       # Sección "Convocatoria" (nuevo — 2026-07-09)
+│   └── reporteria.py         # Sección "Reportería" (nuevo — 2026-07-13)
 ├── .streamlit/
 │   ├── config.toml           # Tema visual (azul oscuro #0F1623 + teal #00A8A8)
 │   └── secrets.toml          # API_BASE_URL, ADMIN_TOKEN (no commitear)
@@ -46,7 +47,7 @@ dashboard-telcou-s1/
 
 ## Navegación (rediseñado — 2026-07-10)
 
-La navegación entre secciones vive en el **sidebar** (antes eran tabs horizontales arriba del contenido) — `st.radio` con las 3 secciones: Colaboradores, Analítica, Convocatoria. La tab **"Áreas" se eliminó** (`ui/areas.py` y las funciones `api_client.get_areas()`/`get_regionales()` fueron borradas, no solo ocultadas — no aportaba valor sobre lo que ya cubre Analítica).
+La navegación entre secciones vive en el **sidebar** (antes eran tabs horizontales arriba del contenido) — `st.radio` con las 4 secciones: Colaboradores, Analítica, Convocatoria, Reportería (esta última agregada 2026-07-13). La tab **"Áreas" se eliminó** (`ui/areas.py` y las funciones `api_client.get_areas()`/`get_regionales()` fueron borradas, no solo ocultadas — no aportaba valor sobre lo que ya cubre Analítica).
 
 Donde antes estaban las tabs (arriba del título) ahora está el **selector de Año** (`st.radio` horizontal: 2026 / 2025 / 2024 / 2023). Hoy solo hay datos reales cargados para 2025 (completo) y 2026 (parcial); 2024 y años anteriores se cargarán más adelante.
 
@@ -94,6 +95,21 @@ Ventana para gestionar el día de capacitación de cada empleado y para enviar c
 
 ---
 
+### 📥 Reportería (nuevo — 2026-07-13)
+
+Sección para descargar reportes de supletorios pendientes en dos formatos, ambos generados en el backend (`app/services/reportes.py`) reutilizando la misma lógica de "quién se quedó" que ya usa Convocatoria y Analítica (`supletorios_pendientes_data()`) — sin duplicar reglas de negocio.
+
+- **Excel (lista) — `GET /analitica/reporte-supletorios-pendientes?anio=`:** `.xlsx` con dos hojas fijas (Quito, TS R2), formato lista (una fila por colaborador + curso pendiente): Cédula, Nombre, Área, Sucursal, Tema, Fecha Inicio, Fecha Fin, Link Moodle, Nota. Sin código de curso. La columna Nota trae solo el valor numérico, o **"F"** si el pendiente es por falta injustificada (nunca rindió el examen, no hay nota que mostrar — antes esa celda quedaba vacía y se confundía con un error de datos).
+- **Vista interactiva (HTML) — `GET /analitica/reporte-supletorios-pendientes-html?anio=`:** página `.html` autocontenida (sin dependencias externas salvo Google Charts para la gráfica — ver abajo), descargable y navegable por colaborador: tarjetas colapsadas por defecto (nombre + cantidad de pendientes, clic para expandir), buscador por nombre/cédula (mínimo 2 letras), y filtros por Regional y Capacitación. Solo aparecen colaboradores con al menos un pendiente.
+- **Resumen con gráfica 3D (nuevo — 2026-07-13, misma tarde):** al final de la vista interactiva, un contador de "Supletorios pendientes en la selección actual" + una gráfica de pastel 3D real (Google Charts, `is3D: true`) comparando Aprobados vs. Supletorio pendiente con porcentaje, reactiva a los filtros de Regional y Capacitación (no a la búsqueda por nombre). Requiere internet la primera vez que se abre (CDN de `gstatic.com`) — si no carga en 4 segundos, muestra un resumen de solo texto en vez de un recuadro roto.
+- **Ambos botones de descarga** (`api_client.get_reporte_pendientes_excel(anio)` / `get_reporte_pendientes_html(anio)`) usan un nuevo helper `_get_bytes()` en `api_client.py`, ya que los helpers existentes (`_get`, `_get_admin`) asumen respuesta JSON — estos dos endpoints devuelven binario.
+
+**Homologación de nombres de capacitación entre Quito y TS R2 (2026-07-13):** Quito y TS R2 cargan sus propias planillas de forma independiente para el mismo año, y los nombres de curso casi nunca coinciden exacto (tildes, sufijos de sede, typos como "TRUBLESHOOTING"/"MANTENIMINETO"). Sin esto, el mismo curso aparecía como dos capacitaciones distintas en el filtro de Reportería, y además `GET /analitica/listado-cursos` (en Analítica) agrupaba mal — mostraba dos filas separadas por regional en vez de una fila comparable. Se agregó `app/services/homologacion_cursos.py` (backend) con un mapeo verificado y confirmado manualmente con el usuario: **46/46 cursos de 2026 homologados**, cero cursos exclusivos de una sola regional. Es una capa de presentación en código puro — no toca la base de datos ni requiere migraciones (decisión explícita para no arriesgar la carga de datos en curso).
+
+> **Verificado con datos reales (2026-07-13):** `GET /analitica/listado-cursos?anio=2026` pasó de 56 filas (20 mal separadas) a exactamente 46 filas, todas con Quito y TS R2 poblados. El filtro de Capacitación en Reportería bajó de 71 a 45 opciones únicas (solo cursos con al menos un pendiente). "MANTENIMIENTO DE CAJAS" (Quito) y "MANTENIMINETO DE CAJAS" (TS R2, con typo) ahora se homologan al mismo nombre en ambos reportes.
+
+---
+
 ## Colores de estado
 
 | Estado | Color |
@@ -128,10 +144,14 @@ Ventana para gestionar el día de capacitación de cada empleado y para enviar c
 | `enviar_convocatoria(cedulas, semana, modo_prueba, correo_prueba, regional, dia)` | `POST /admin/enviar-convocatoria` | Envía correos de convocatoria a supletorio, con modo prueba, recopilatorio al jefe y resumen ejecutivo a coordinación (2026-07-09) |
 | `get_envios_convocatoria(anio, regional, modo_prueba)` | `GET /analitica/envios-convocatoria` | Historial/auditoría de convocatorias ya enviadas, protegido por `X-Admin-Token` (2026-07-09) |
 | `get_regional_dia_configurado(regional)` | `GET /analitica/regional-dia-configurado` | `bool` — si la regional tiene `día` cargado para al menos un colaborador (2026-07-10) |
+| `get_reporte_pendientes_excel(anio)` | `GET /analitica/reporte-supletorios-pendientes` | Descarga el reporte Excel de supletorios pendientes (bytes), sección Reportería (2026-07-13) |
+| `get_reporte_pendientes_html(anio)` | `GET /analitica/reporte-supletorios-pendientes-html` | Descarga la vista interactiva HTML de supletorios pendientes (bytes), sección Reportería (2026-07-13) |
 
-Todas las funciones usan `@st.cache_data(ttl=900)`, **excepto** las 7 nuevas de arriba (`get_convocatoria_preview` en adelante) — son escrituras o lecturas sensibles a cambios recientes, no se cachean. Para refrescar manualmente las que sí cachean: botón "Limpiar caché" en el sidebar.
+Todas las funciones usan `@st.cache_data(ttl=900)`, **excepto** las 9 nuevas de arriba (`get_convocatoria_preview` en adelante) — son escrituras o lecturas sensibles a cambios recientes, no se cachean. Para refrescar manualmente las que sí cachean: botón "Limpiar caché" en el sidebar.
 
 `get_envios_convocatoria` usa un helper nuevo, `_get_admin()` en `api_client.py` — igual que `_get()` pero manda `X-Admin-Token`, porque el endpoint de auditoría es de lectura pero sigue protegido (no se expone historial de envíos sin token).
+
+`get_reporte_pendientes_excel`/`_html` usan otro helper nuevo, `_get_bytes()` — igual que `_get()` pero devuelve `r.content` (bytes) en vez de `r.json()`, porque estos dos endpoints no devuelven JSON sino un archivo binario/texto para descargar directo con `st.download_button`.
 
 Timeout de requests: 30s en lecturas (`_get`), 60s en escrituras (`_patch`/`_post`, usadas por la tab Convocatoria — el envío de correos puede tardar más).
 
