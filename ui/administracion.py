@@ -118,6 +118,98 @@ def _form_alta_empleado(persona: dict, regional_sugerida: str) -> None:
                     st.success(f"Empleado {resultado['nombre']} creado. Vuelve a cargar el mismo CSV para registrar su nota.")
 
 
+_ESTADOS_RESOLUCION = {
+    "Falta injustificada (F)": "FALTA_INJUSTIFICADA",
+    "Falta justificada (J)": "FALTA_JUSTIFICADA",
+    "No aplica (NA)": "NO_APLICA",
+    "Vacaciones (V)": "VACACIONES",
+    "Exonerado": "EXONERADO",
+    "Asistencia": "ASISTENCIA",
+}
+
+
 def _seccion_novedades(anio: int) -> None:
     st.markdown("### 📋 Novedades — quiénes no han rendido")
-    st.caption("Placeholder — se completa en la siguiente tarea del plan.")
+    st.caption(
+        "Activos que no tienen ninguna nota en un curso ya cargado. Se puede notificar a su "
+        "jefe directo, y luego resolver el estado final cuando se sepa qué pasó."
+    )
+
+    cursos = api.get_cursos(anio=anio)
+    if not cursos:
+        st.info(f"No hay cursos cargados para el año {anio} todavía.")
+        return
+
+    opciones = {f"{c['nombre']} — {c['regional_nombre']} ({c['codigo']})": c["id"] for c in cursos}
+    seleccionado = st.selectbox("Curso", list(opciones.keys()), key="novedad_curso_select")
+    curso_id = opciones[seleccionado]
+
+    with st.spinner("Cargando…"):
+        datos = api.get_no_rindieron(curso_id)
+
+    if not datos:
+        st.info("No se pudo cargar la información de este curso.")
+        return
+
+    _tabla_sin_notificar(curso_id, datos["sin_notificar"])
+    st.divider()
+    _tabla_pendientes_resolver(datos["pendientes_resolver"])
+
+
+def _tabla_sin_notificar(curso_id: int, personas: list[dict]) -> None:
+    st.markdown(f"#### Sin notificar ({len(personas)})")
+    if not personas:
+        st.info("Todos los activos de esta regional tienen alguna nota en este curso.")
+        return
+
+    seleccionadas = []
+    for p in personas:
+        marcado = st.checkbox(f"{p['nombre']} — {p['cedula']}", value=True, key=f"chk_{curso_id}_{p['cedula']}")
+        if marcado:
+            seleccionadas.append(p["cedula"])
+
+    modo_prueba = st.toggle("Modo prueba", value=True, key=f"novedad_modo_prueba_{curso_id}",
+                             help="Mientras esté activo, TODOS los correos de esta tanda se redirigen al correo de prueba.")
+    correo_prueba = None
+    if modo_prueba:
+        correo_prueba = st.text_input("Correo de prueba", placeholder="tu_correo@telconet.ec", key=f"novedad_correo_prueba_{curso_id}")
+
+    if st.button(f"Enviar novedad a jefes ({len(seleccionadas)} seleccionados)", type="primary", key=f"btn_novedad_{curso_id}"):
+        if not seleccionadas:
+            st.error("Selecciona al menos una persona.")
+            return
+        if modo_prueba and not correo_prueba:
+            st.error("Ingresa un correo de prueba mientras el modo prueba esté activo.")
+            return
+
+        with st.spinner("Enviando…"):
+            resultado = api.enviar_novedad(curso_id, seleccionadas, modo_prueba, correo_prueba)
+
+        if resultado:
+            sufijo = " (modo prueba)" if modo_prueba else ""
+            st.success(f"✅ Notificados: {len(resultado['notificados'])}{sufijo} · Correos a jefes: {len(resultado['recopilatorios_enviados'])}")
+            st.rerun()
+
+
+def _tabla_pendientes_resolver(personas: list[dict]) -> None:
+    st.markdown(f"#### Pendientes de resolver ({len(personas)})")
+    if not personas:
+        st.info("No hay novedades pendientes de resolver para este curso.")
+        return
+
+    for p in personas:
+        col1, col2, col3 = st.columns([3, 2, 1])
+        with col1:
+            st.write(f"**{p['nombre']}** — {p['cedula']}")
+        with col2:
+            etiqueta = st.selectbox(
+                "Estado final", list(_ESTADOS_RESOLUCION.keys()),
+                key=f"resolver_estado_{p['nota_id']}", label_visibility="collapsed",
+            )
+        with col3:
+            if st.button("Guardar", key=f"resolver_btn_{p['nota_id']}"):
+                estado = _ESTADOS_RESOLUCION[etiqueta]
+                resultado = api.resolver_nota(p["nota_id"], estado)
+                if resultado:
+                    st.success(f"{p['nombre']} → {etiqueta}")
+                    st.rerun()
