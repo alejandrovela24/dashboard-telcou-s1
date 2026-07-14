@@ -316,3 +316,11 @@ def enviar_novedad(
 
 def resolver_nota(nota_id: int, estado: str) -> dict | None:
     return _patch(f"/admin/notas/{nota_id}/resolver", {"estado": estado})
+
+
+def set_convocatoria_habilitada(curso_id: int, habilitada: bool) -> dict | None:
+    return _patch(f"/admin/curso/{curso_id}/convocatoria-habilitada", {"habilitada": habilitada})
+
+
+def marcar_na(curso_id: int, cedulas: list[str]) -> dict | None:
+    return _post(f"/admin/curso/{curso_id}/marcar-na", {"cedulas": cedulas})
