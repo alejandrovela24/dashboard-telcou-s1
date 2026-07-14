@@ -12,6 +12,8 @@ def render_tab_administracion(anio: int) -> None:
 
     _seccion_carga_curso(anio)
     st.divider()
+    _seccion_convocatoria_por_curso(anio)
+    st.divider()
     _seccion_novedades(anio)
 
 
@@ -129,6 +131,33 @@ def _form_alta_empleado(persona: dict, regional_sugerida: str) -> None:
                         ultimo["sin_match"] = [
                             p for p in ultimo["sin_match"] if p["cedula"] != persona["cedula"]
                         ]
+                    st.rerun()
+
+
+def _seccion_convocatoria_por_curso(anio: int) -> None:
+    st.markdown("### 📅 Convocatoria por curso")
+    st.caption(
+        "Un curso recién cargado no cuenta para Convocatoria hasta que lo actives aquí. "
+        "Los cursos ya cargados antes de esta funcionalidad quedaron activos por defecto."
+    )
+
+    cursos = api.get_cursos(anio=anio)
+    if not cursos:
+        st.info(f"No hay cursos cargados para el año {anio} todavía.")
+        return
+
+    for c in sorted(cursos, key=lambda c: c["nombre"]):
+        col_nombre, col_toggle = st.columns([4, 1])
+        with col_nombre:
+            st.write(f"**{c['nombre']}** — {c['regional_nombre']} ({c['codigo']})")
+        with col_toggle:
+            habilitada = st.toggle(
+                "Convocatoria", value=c["convocatoria_habilitada"],
+                key=f"conv_hab_{c['id']}", label_visibility="collapsed",
+            )
+            if habilitada != c["convocatoria_habilitada"]:
+                resultado = api.set_convocatoria_habilitada(c["id"], habilitada)
+                if resultado:
                     st.rerun()
 
 
