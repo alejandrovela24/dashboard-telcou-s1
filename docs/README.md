@@ -34,7 +34,8 @@ dashboard-telcou-s1/
 │   ├── colaboradores.py      # Sección "Colaboradores"
 │   ├── analitica.py          # Sección "Analítica"
 │   ├── convocatoria.py       # Sección "Convocatoria" (nuevo — 2026-07-09)
-│   └── reporteria.py         # Sección "Reportería" (nuevo — 2026-07-13)
+│   ├── reporteria.py         # Sección "Reportería" (nuevo — 2026-07-13)
+│   └── administracion.py     # Sección "Administración" (nuevo — 2026-07-13)
 ├── .streamlit/
 │   ├── config.toml           # Tema visual (azul oscuro #0F1623 + teal #00A8A8)
 │   └── secrets.toml          # API_BASE_URL, ADMIN_TOKEN (no commitear)
@@ -47,7 +48,7 @@ dashboard-telcou-s1/
 
 ## Navegación (rediseñado — 2026-07-10)
 
-La navegación entre secciones vive en el **sidebar** (antes eran tabs horizontales arriba del contenido) — `st.radio` con las 4 secciones: Colaboradores, Analítica, Convocatoria, Reportería (esta última agregada 2026-07-13). La tab **"Áreas" se eliminó** (`ui/areas.py` y las funciones `api_client.get_areas()`/`get_regionales()` fueron borradas, no solo ocultadas — no aportaba valor sobre lo que ya cubre Analítica).
+La navegación entre secciones vive en el **sidebar** (antes eran tabs horizontales arriba del contenido) — `st.radio` con las 5 secciones: Colaboradores, Analítica, Convocatoria, Reportería, Administración (esta última agregada 2026-07-13). La tab **"Áreas" se eliminó** (`ui/areas.py` y las funciones `api_client.get_areas()`/`get_regionales()` fueron borradas, no solo ocultadas — no aportaba valor sobre lo que ya cubre Analítica).
 
 Donde antes estaban las tabs (arriba del título) ahora está el **selector de Año** (`st.radio` horizontal: 2026 / 2025 / 2024 / 2023). Hoy solo hay datos reales cargados para 2025 (completo) y 2026 (parcial); 2024 y años anteriores se cargarán más adelante.
 
@@ -110,6 +111,29 @@ Sección para descargar reportes de supletorios pendientes en dos formatos, ambo
 
 ---
 
+### 🛠️ Administración (nuevo — 2026-07-13)
+
+Nueva `ui/administracion.py`, 5ª entrada del sidebar. Tres flujos conectados entre sí, pensados para que el admin cargue un curso completo (carga → altas de empleados nuevos → aviso de novedades) sin salir de la pantalla.
+
+**1. Carga de curso desde CSV.** `st.file_uploader` para el export crudo de Moodle (extensión `.xls` engañosa — es CSV, UTF-8 con BOM) + radio **Curso nuevo** / **Supletorio de curso existente**:
+- **Curso nuevo (Modo A):** el admin llena código, nombre, tipo (`PRESENCIAL`/`VIRTUAL`/`ZOOM`), mes, fechas y regional. Cada fila del CSV se guarda como `Nota(tipo="REGULAR", convocatoria=1)`.
+- **Supletorio (Modo B):** el admin elige un curso ya cargado (selector filtrable por año) y un número de convocatoria (2, 3…). Cada fila se guarda como `Nota(tipo="SUPLETORIO")` enlazada vía `nota_original_id` a la nota REGULAR de esa misma persona en ese curso — si no existe una REGULAR previa, la fila se reporta como error (`sin_regular`), nunca se crea un supletorio huérfano.
+- Recargar el mismo CSV corrige/completa sin duplicar (upsert por `empleado_id, curso_id, tipo, convocatoria`). Cédulas sin match no bloquean el resto de la carga — se acumulan y disparan el Flujo 2.
+
+**Formato del CSV de Moodle:** columnas `Nombre`, `Departamento` (→ área), `Dirección de correo`, `Número de ID` (cédula, normalizada con `.zfill(10)`), `Calificación/10,00` (coma decimal, formato Ecuador). La última fila ("Promedio general", `Nombre` vacío) se descarta. Umbral de aprobación **7.5** (mismo valor que los importadores existentes).
+
+**2. Alta de empleado nuevo.** Por cada cédula del CSV sin match en la BD, un formulario pre-llenado (`cedula`, `nombre`, `area`, `correo` ya vienen del CSV) donde el admin completa lo que falta: **jefe inmediato** y **su correo** (obligatorios — sin esto Convocatoria no puede notificarlo), **sucursal** (solo si la regional es TS R2), **género** (opcional). Al guardar se crea `Empleado` + `VariableAdicional`; el admin debe volver a cargar el mismo CSV para que esa fila, ya con match, se registre como nota.
+
+**3. Novedades.** Para cualquier curso ya cargado: activos de esa regional sin ninguna nota en el curso, separados en dos tablas alimentadas por la misma consulta:
+- **Sin notificar** — checkboxes (todos marcados por defecto) + botón "Enviar novedad a jefes", con **modo prueba obligatorio y ON por defecto** (igual que Convocatoria). Agrupa por `jefe_correo` — un correo por jefe, no uno por persona. Cada envío real crea `Nota(estado="PENDIENTE_JUSTIFICACION")` para esa persona, que pasa a la otra tabla.
+- **Pendientes de resolver** — quienes ya tienen esa nota `PENDIENTE_JUSTIFICACION`; un selector de estado final (F/J/NA/V/Exonerado/Asistencia) por fila con botón "Guardar", que actualiza la nota existente in place (mismo `id`).
+
+Esta separación deja que el admin vuelva días después a la misma pantalla y siga viendo, sin recordar nada, tanto a quién falta notificar como a quién falta resolver.
+
+**Nuevo estado `PENDIENTE_JUSTIFICACION`:** creado al enviar una novedad real, significa "se avisó al jefe, todavía sin resolver". Cuenta como pendiente de supletorio mientras no se resuelve — se agregó a `NECESITA_SUPLETORIO` en el backend (`app/services/convocatoria.py`), junto a `REPROBADO`/`FALTA_INJUSTIFICADA`. No requirió ninguna migración — `Nota.estado` es texto libre sin `CHECK`.
+
+---
+
 ## Colores de estado
 
 | Estado | Color |
@@ -146,8 +170,16 @@ Sección para descargar reportes de supletorios pendientes en dos formatos, ambo
 | `get_regional_dia_configurado(regional)` | `GET /analitica/regional-dia-configurado` | `bool` — si la regional tiene `día` cargado para al menos un colaborador (2026-07-10) |
 | `get_reporte_pendientes_excel(anio)` | `GET /analitica/reporte-supletorios-pendientes` | Descarga el reporte Excel de supletorios pendientes (bytes), sección Reportería (2026-07-13) |
 | `get_reporte_pendientes_html(anio)` | `GET /analitica/reporte-supletorios-pendientes-html` | Descarga la vista interactiva HTML de supletorios pendientes (bytes), sección Reportería (2026-07-13) |
+| `get_cursos(anio, regional)` | `GET /cursos/` | Lista cursos ya cargados, para los selectores de "Supletorio existente" y "Novedades" en Administración (2026-07-13) |
+| `cargar_curso(archivo_bytes, nombre_archivo, modo, ...)` | `POST /admin/cargar-curso` | Sube el CSV de Moodle (multipart), modo `nuevo`/`supletorio` con sus parámetros específicos — sección Administración (2026-07-13) |
+| `crear_empleado(payload)` | `POST /admin/empleados` | Alta de un empleado nuevo (Flujo 2 de Administración) a partir del formulario de una cédula sin match (2026-07-13) |
+| `get_no_rindieron(curso_id)` | `GET /analitica/curso/{curso_id}/no-rindieron` | Activos de la regional del curso sin ninguna nota, separados en `sin_notificar`/`pendientes_resolver` — sección Novedades (2026-07-13) |
+| `enviar_novedad(curso_id, cedulas, modo_prueba, correo_prueba)` | `POST /admin/curso/{curso_id}/enviar-novedad` | Envía la novedad agrupada por jefe, con modo prueba obligatorio; crea las notas `PENDIENTE_JUSTIFICACION` en envío real (2026-07-13) |
+| `resolver_nota(nota_id, estado)` | `PATCH /admin/notas/{nota_id}/resolver` | Resuelve una nota `PENDIENTE_JUSTIFICACION` in place hacia F/J/NA/V/Exonerado/Asistencia (2026-07-13) |
 
-Todas las funciones usan `@st.cache_data(ttl=900)`, **excepto** las 9 nuevas de arriba (`get_convocatoria_preview` en adelante) — son escrituras o lecturas sensibles a cambios recientes, no se cachean. Para refrescar manualmente las que sí cachean: botón "Limpiar caché" en el sidebar.
+Todas las funciones usan `@st.cache_data(ttl=900)`, **excepto** las 15 de arriba (`get_convocatoria_preview` en adelante, incluyendo las 6 nuevas de Administración) — son escrituras o lecturas sensibles a cambios recientes, no se cachean. Para refrescar manualmente las que sí cachean: botón "Limpiar caché" en el sidebar.
+
+Las 6 funciones de Administración usan un nuevo helper, `_post_file()` en `api_client.py` — igual que `_post()` pero manda `multipart/form-data` (vía el parámetro `files` de `requests`) en vez de JSON, con `X-Admin-Token` y timeout 120s (más alto que el resto porque sube un archivo), usado solo por `cargar_curso()`.
 
 `get_envios_convocatoria` usa un helper nuevo, `_get_admin()` en `api_client.py` — igual que `_get()` pero manda `X-Admin-Token`, porque el endpoint de auditoría es de lectura pero sigue protegido (no se expone historial de envíos sin token).
 
