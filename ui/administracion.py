@@ -78,6 +78,7 @@ def _seccion_carga_curso(anio: int) -> None:
 
         if resultado:
             st.session_state["admin_ultimo_resultado"] = resultado
+            st.session_state["admin_ultimo_resultado_modo"] = modo
 
     resultado = st.session_state.get("admin_ultimo_resultado")
     if resultado:
@@ -87,6 +88,7 @@ def _seccion_carga_curso(anio: int) -> None:
         with col_clear:
             if st.button("Limpiar", key="admin_limpiar_resultado"):
                 st.session_state.pop("admin_ultimo_resultado", None)
+                st.session_state.pop("admin_ultimo_resultado_modo", None)
                 st.rerun()
         if resultado.get("sin_regular"):
             st.warning(
@@ -98,6 +100,8 @@ def _seccion_carga_curso(anio: int) -> None:
             st.markdown(f"#### 🧑‍💼 {len(resultado['sin_match'])} colaborador(es) sin registrar — dar de alta")
             for persona in resultado["sin_match"]:
                 _form_alta_empleado(persona, metadata.get("regional", "TS R2"))
+        if st.session_state.get("admin_ultimo_resultado_modo") == "nuevo":
+            _seccion_marcar_na(resultado["curso_id"])
 
 
 def _form_alta_empleado(persona: dict, regional_sugerida: str) -> None:
@@ -132,6 +136,41 @@ def _form_alta_empleado(persona: dict, regional_sugerida: str) -> None:
                             p for p in ultimo["sin_match"] if p["cedula"] != persona["cedula"]
                         ]
                     st.rerun()
+
+
+def _seccion_marcar_na(curso_id: int) -> None:
+    with st.spinner("Cargando activos sin nota…"):
+        datos = api.get_no_rindieron(curso_id)
+
+    if not datos or not datos.get("sin_notificar"):
+        return
+
+    st.markdown(f"#### 🚫 Activos sin nota en este curso ({len(datos['sin_notificar'])})")
+    st.caption(
+        "Si ya sabes que alguno de estos no fue convocado a este curso, márcalo NA directamente "
+        "acá — sin esperar respuesta del jefe. Quien no marques sigue su camino normal por Novedades."
+    )
+
+    seleccionadas = []
+    for p in datos["sin_notificar"]:
+        marcado = st.checkbox(
+            f"{p['nombre']} — {p['cedula']}", value=False,
+            key=f"na_{curso_id}_{p['cedula']}",
+        )
+        if marcado:
+            seleccionadas.append(p["cedula"])
+
+    if st.button(f"Marcar NA ({len(seleccionadas)} seleccionados)", key=f"btn_marcar_na_{curso_id}"):
+        if not seleccionadas:
+            st.error("Selecciona al menos una persona.")
+            return
+
+        with st.spinner("Marcando…"):
+            resultado = api.marcar_na(curso_id, seleccionadas)
+
+        if resultado:
+            st.success(f"✅ Marcados como NA: {len(resultado['marcados'])}")
+            st.rerun()
 
 
 def _seccion_convocatoria_por_curso(anio: int) -> None:
