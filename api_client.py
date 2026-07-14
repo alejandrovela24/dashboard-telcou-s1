@@ -60,6 +60,23 @@ def _get_bytes(path: str, params: dict = None) -> bytes | None:
         return None
 
 
+def _post_file(path: str, files: dict, params: dict = None) -> dict | list | None:
+    headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
+    try:
+        r = requests.post(f"{_base()}{path}", files=files, params=params, headers=headers, timeout=120)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.ConnectionError:
+        st.error("No se puede conectar a la API. Verifica que telcou-api esté corriendo en " + _base())
+        return None
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Error de API ({e.response.status_code}): {e.response.text}")
+        return None
+    except Exception as e:
+        st.error(f"Error inesperado al contactar la API: {e}")
+        return None
+
+
 def _write(method: str, path: str, json: dict = None, params: dict = None) -> dict | list | None:
     headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
     try:
@@ -239,3 +256,63 @@ def get_envios_convocatoria(
     if modo_prueba is not None:
         params["modo_prueba"] = modo_prueba
     return _get_admin("/analitica/envios-convocatoria", params) or []
+
+
+def get_cursos(anio: Optional[int] = None, regional: Optional[str] = None) -> list[dict]:
+    params = {}
+    if anio:     params["anio"] = anio
+    if regional: params["regional"] = regional
+    return _get("/cursos/", params) or []
+
+
+def cargar_curso(
+    archivo_bytes: bytes,
+    nombre_archivo: str,
+    modo: str,
+    *,
+    codigo: Optional[str] = None,
+    nombre: Optional[str] = None,
+    tipo: Optional[str] = None,
+    mes: Optional[str] = None,
+    fecha_inicio: Optional[str] = None,
+    fecha_fin: Optional[str] = None,
+    anio: Optional[int] = None,
+    regional: Optional[str] = None,
+    curso_id: Optional[int] = None,
+    convocatoria: Optional[int] = None,
+) -> dict | None:
+    params: dict = {"modo": modo}
+    if modo == "nuevo":
+        params.update({
+            "codigo": codigo, "nombre": nombre, "tipo": tipo, "mes": mes,
+            "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin,
+            "anio": anio, "regional": regional,
+        })
+    else:
+        params.update({"curso_id": curso_id, "convocatoria": convocatoria})
+    files = {"archivo": (nombre_archivo, archivo_bytes, "text/csv")}
+    return _post_file("/admin/cargar-curso", files=files, params=params)
+
+
+def crear_empleado(payload: dict) -> dict | None:
+    return _post("/admin/empleados", payload)
+
+
+def get_no_rindieron(curso_id: int) -> dict | None:
+    return _get_admin(f"/analitica/curso/{curso_id}/no-rindieron")
+
+
+def enviar_novedad(
+    curso_id: int,
+    cedulas: list[str],
+    modo_prueba: bool,
+    correo_prueba: Optional[str] = None,
+) -> dict | None:
+    body = {"cedulas": cedulas, "modo_prueba": modo_prueba}
+    if correo_prueba:
+        body["correo_prueba"] = correo_prueba
+    return _post(f"/admin/curso/{curso_id}/enviar-novedad", body)
+
+
+def resolver_nota(nota_id: int, estado: str) -> dict | None:
+    return _patch(f"/admin/notas/{nota_id}/resolver", {"estado": estado})
