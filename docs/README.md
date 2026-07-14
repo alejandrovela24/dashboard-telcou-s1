@@ -132,6 +132,14 @@ Esta separación deja que el admin vuelva días después a la misma pantalla y s
 
 **Nuevo estado `PENDIENTE_JUSTIFICACION`:** creado al enviar una novedad real, significa "se avisó al jefe, todavía sin resolver". Cuenta como pendiente de supletorio mientras no se resuelve — se agregó a `NECESITA_SUPLETORIO` en el backend (`app/services/convocatoria.py`), junto a `REPROBADO`/`FALTA_INJUSTIFICADA`. No requirió ninguna migración — `Nota.estado` es texto libre sin `CHECK`.
 
+**Fixes de la revisión final de rama (2026-07-14):** una revisión holística tras completar los 16 tasks encontró y corrigió 6 gaps que solo eran visibles al ver las piezas compuestas juntas:
+- *Backend* — `cargar_supletorio` ya no enlaza un supletorio contra una nota `PENDIENTE_JUSTIFICACION` (placeholder, no una nota REGULAR real); esas cédulas ahora se reportan en `sin_regular` igual que si no existiera nota previa.
+- *Backend* — `parsear_csv_moodle` valida el encoding UTF-8 y el endpoint `/admin/cargar-curso` retorna **400** (antes: 500 sin manejar) si el CSV viene en otro encoding (p.ej. Windows-1252/Latin-1, común en exports de Excel/Moodle con tildes).
+- *Backend* — `enviar_novedad` solo reporta una cédula en `notificados` cuando la nota `PENDIENTE_JUSTIFICACION` realmente se creó (antes podía reportar como "notificado" a alguien que ya tenía otra nota para ese curso, sin que el `ON CONFLICT DO NOTHING` insertara nada).
+- *Frontend* — la lista de "sin registrar" ahora se refresca tras dar de alta a un empleado (antes seguía mostrándolo indefinidamente aunque ya estuviera creado).
+- *Frontend* — botón **"Limpiar"** junto al resumen de carga, para descartar el panel manualmente.
+- *Frontend* — Modo B (supletorio) ahora sugiere la regional real del curso seleccionado en el formulario de alta (antes siempre asumía TS R2).
+
 ---
 
 ## Colores de estado
