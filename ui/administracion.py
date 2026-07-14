@@ -151,14 +151,18 @@ def _seccion_convocatoria_por_curso(anio: int) -> None:
         with col_nombre:
             st.write(f"**{c['nombre']}** — {c['regional_nombre']} ({c['codigo']})")
         with col_toggle:
-            habilitada = st.toggle(
+            st.toggle(
                 "Convocatoria", value=c["convocatoria_habilitada"],
                 key=f"conv_hab_{c['id']}", label_visibility="collapsed",
+                on_change=_on_toggle_convocatoria_habilitada, args=(c["id"],),
             )
-            if habilitada != c["convocatoria_habilitada"]:
-                resultado = api.set_convocatoria_habilitada(c["id"], habilitada)
-                if resultado:
-                    st.rerun()
+
+
+def _on_toggle_convocatoria_habilitada(curso_id: int) -> None:
+    habilitada = st.session_state[f"conv_hab_{curso_id}"]
+    resultado = api.set_convocatoria_habilitada(curso_id, habilitada)
+    if not resultado:
+        st.error("No se pudo actualizar el estado de convocatoria. Intenta de nuevo.")
 
 
 _ESTADOS_RESOLUCION = {
