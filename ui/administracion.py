@@ -50,7 +50,9 @@ def _seccion_carga_curso(anio: int) -> None:
             st.info(f"No hay cursos cargados para el año {anio} todavía.")
             return
         seleccionado = st.selectbox("Curso existente", list(opciones.keys()), key="admin_curso_existente")
-        metadata["curso_id"] = opciones[seleccionado]
+        curso_elegido = next(c for c in cursos if c["id"] == opciones[seleccionado])
+        metadata["curso_id"] = curso_elegido["id"]
+        metadata["regional"] = curso_elegido["regional_nombre"]
         metadata["convocatoria"] = st.number_input("Número de convocatoria (supletorio)", min_value=2, value=2, step=1, key="admin_convocatoria")
 
     if st.button("Cargar CSV", type="primary", disabled=archivo is None):
@@ -77,7 +79,13 @@ def _seccion_carga_curso(anio: int) -> None:
 
     resultado = st.session_state.get("admin_ultimo_resultado")
     if resultado:
-        st.success(f"✅ Nuevos: {resultado['nuevos']} · Actualizados: {resultado['actualizados']}")
+        col_msg, col_clear = st.columns([5, 1])
+        with col_msg:
+            st.success(f"✅ Nuevos: {resultado['nuevos']} · Actualizados: {resultado['actualizados']}")
+        with col_clear:
+            if st.button("Limpiar", key="admin_limpiar_resultado"):
+                st.session_state.pop("admin_ultimo_resultado", None)
+                st.rerun()
         if resultado.get("sin_regular"):
             st.warning(
                 f"⚠️ {len(resultado['sin_regular'])} persona(s) no tienen nota REGULAR previa en este curso "
@@ -116,6 +124,12 @@ def _form_alta_empleado(persona: dict, regional_sugerida: str) -> None:
                 resultado = api.crear_empleado(payload)
                 if resultado:
                     st.success(f"Empleado {resultado['nombre']} creado. Vuelve a cargar el mismo CSV para registrar su nota.")
+                    ultimo = st.session_state.get("admin_ultimo_resultado")
+                    if ultimo and ultimo.get("sin_match"):
+                        ultimo["sin_match"] = [
+                            p for p in ultimo["sin_match"] if p["cedula"] != persona["cedula"]
+                        ]
+                    st.rerun()
 
 
 _ESTADOS_RESOLUCION = {
