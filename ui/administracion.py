@@ -145,17 +145,78 @@ def _seccion_marcar_na(curso_id: int) -> None:
     if not datos or not datos.get("sin_notificar"):
         return
 
-    st.markdown(f"#### 🚫 Activos sin nota en este curso ({len(datos['sin_notificar'])})")
+    personas = datos["sin_notificar"]
+    cedulas_disponibles = {p["cedula"] for p in personas}
+
+    st.markdown(f"#### 🚫 Activos sin nota en este curso ({len(personas)})")
     st.caption(
         "Si ya sabes que alguno de estos no fue convocado a este curso, márcalo NA directamente "
         "acá — sin esperar respuesta del jefe. Quien no marques sigue su camino normal por Novedades."
     )
 
+    version_key = f"na_version_{curso_id}"
+    marcadas_key = f"na_marcadas_{curso_id}"
+    st.session_state.setdefault(version_key, 0)
+    st.session_state.setdefault(marcadas_key, set())
+
+    col_todos, col_ninguno = st.columns([1, 1])
+    with col_todos:
+        if st.button("☑️ Seleccionar todos", key=f"na_todos_{curso_id}"):
+            st.session_state[marcadas_key] = set(cedulas_disponibles)
+            st.session_state[version_key] += 1
+            st.rerun()
+    with col_ninguno:
+        if st.button("☐ Ninguno", key=f"na_ninguno_{curso_id}"):
+            st.session_state[marcadas_key] = set()
+            st.session_state[version_key] += 1
+            st.rerun()
+
+    archivo_na = st.file_uploader(
+        "O sube una lista de cédulas que no aplican (.txt/.csv, una cédula por línea)",
+        type=["txt", "csv"], key=f"na_archivo_{curso_id}",
+    )
+    if archivo_na is not None:
+        firma_archivo = (archivo_na.name, archivo_na.size)
+        procesado_key = f"na_archivo_procesado_{curso_id}"
+        if st.session_state.get(procesado_key) != firma_archivo:
+            st.session_state[procesado_key] = firma_archivo
+            contenido = archivo_na.getvalue().decode("utf-8-sig", errors="ignore")
+            cedulas_lista = {
+                token.strip()
+                for linea in contenido.splitlines()
+                for token in linea.replace(";", ",").split(",")
+                if token.strip()
+            }
+            coincidencias = cedulas_lista & cedulas_disponibles
+            if coincidencias:
+                st.session_state[marcadas_key] = st.session_state[marcadas_key] | coincidencias
+                st.session_state[version_key] += 1
+            st.session_state[f"na_resultado_archivo_{curso_id}"] = (
+                len(coincidencias), len(cedulas_lista) - len(coincidencias),
+            )
+            st.rerun()
+
+    resultado_archivo = st.session_state.pop(f"na_resultado_archivo_{curso_id}", None)
+    if resultado_archivo:
+        n_ok, n_no = resultado_archivo
+        if n_ok:
+            st.success(f"✅ {n_ok} cédula(s) de la lista coinciden y se marcaron.")
+        else:
+            st.warning("Ninguna cédula de la lista coincide con los activos sin nota de este curso.")
+        if n_no:
+            st.caption(
+                f"{n_no} cédula(s) de la lista no se encontraron entre los activos sin nota "
+                "(ya tienen nota, no son de esta regional, o la cédula no existe)."
+            )
+
+    version = st.session_state[version_key]
+    marcadas_previas = st.session_state[marcadas_key]
+
     seleccionadas = []
-    for p in datos["sin_notificar"]:
+    for p in personas:
         marcado = st.checkbox(
-            f"{p['nombre']} — {p['cedula']}", value=False,
-            key=f"na_{curso_id}_{p['cedula']}",
+            f"{p['nombre']} — {p['cedula']}", value=p["cedula"] in marcadas_previas,
+            key=f"na_{curso_id}_{version}_{p['cedula']}",
         )
         if marcado:
             seleccionadas.append(p["cedula"])
@@ -170,6 +231,8 @@ def _seccion_marcar_na(curso_id: int) -> None:
 
         if resultado:
             st.success(f"✅ Marcados como NA: {len(resultado['marcados'])}")
+            st.session_state.pop(marcadas_key, None)
+            st.session_state.pop(version_key, None)
             st.rerun()
 
 
