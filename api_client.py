@@ -60,6 +60,25 @@ def _get_bytes(path: str, params: dict = None) -> bytes | None:
         return None
 
 
+def _get_bytes_admin(path: str, params: dict = None) -> bytes | None:
+    headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
+    try:
+        r = requests.get(f"{_base()}{path}", params=params, headers=headers, timeout=60)
+        r.raise_for_status()
+        return r.content
+    except requests.exceptions.ConnectionError:
+        st.error("No se puede conectar a la API. Verifica que telcou-api esté corriendo en " + _base())
+        return None
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return None
+        st.error(f"Error de API ({e.response.status_code}): {e.response.text}")
+        return None
+    except Exception as e:
+        st.error(f"Error inesperado al contactar la API: {e}")
+        return None
+
+
 def _post_file(path: str, files: dict, params: dict = None) -> dict | list | None:
     headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
     try:
@@ -185,12 +204,46 @@ def get_convocatoria_preview(dia: str, regional: str, semana: str) -> list[dict]
     ) or []
 
 
-def get_reporte_pendientes_excel(anio: int) -> bytes | None:
-    return _get_bytes("/analitica/reporte-supletorios-pendientes", {"anio": anio})
+def get_reporte_pendientes_excel(anio: int, dia: Optional[list[str]] = None) -> bytes | None:
+    params = {"anio": anio}
+    if dia:
+        params["dia"] = dia  # requests repite el parametro por cada elemento de la lista
+    return _get_bytes("/analitica/reporte-supletorios-pendientes", params)
 
 
-def get_reporte_pendientes_html(anio: int) -> bytes | None:
-    return _get_bytes("/analitica/reporte-supletorios-pendientes-html", {"anio": anio})
+def get_reporte_pendientes_html(anio: int, dia: Optional[list[str]] = None) -> bytes | None:
+    params = {"anio": anio}
+    if dia:
+        params["dia"] = dia
+    return _get_bytes("/analitica/reporte-supletorios-pendientes-html", params)
+
+
+def get_reporte_asistencia_excel(anio: int, regional: Optional[str] = None) -> bytes | None:
+    params = {"anio": anio}
+    if regional:
+        params["regional"] = regional
+    return _get_bytes("/analitica/reporte-asistencia", params)
+
+
+def get_reporte_asistencia_html(anio: int, regional: Optional[str] = None) -> bytes | None:
+    params = {"anio": anio}
+    if regional:
+        params["regional"] = regional
+    return _get_bytes("/analitica/reporte-asistencia-html", params)
+
+
+def get_reporte_calificaciones_excel(anio: int, regional: Optional[str] = None) -> bytes | None:
+    params = {"anio": anio}
+    if regional:
+        params["regional"] = regional
+    return _get_bytes("/analitica/reporte-calificaciones", params)
+
+
+def get_reporte_calificaciones_html(anio: int, regional: Optional[str] = None) -> bytes | None:
+    params = {"anio": anio}
+    if regional:
+        params["regional"] = regional
+    return _get_bytes("/analitica/reporte-calificaciones-html", params)
 
 
 def get_regional_dia_configurado(regional: str) -> bool:
@@ -232,8 +285,12 @@ def enviar_convocatoria(
     correo_prueba: Optional[str] = None,
     regional: Optional[str] = None,
     dia: Optional[str] = None,
+    enviar_resumen_ejecutivo: bool = True,
 ) -> dict | None:
-    body = {"cedulas": cedulas, "semana": semana, "modo_prueba": modo_prueba}
+    body = {
+        "cedulas": cedulas, "semana": semana, "modo_prueba": modo_prueba,
+        "enviar_resumen_ejecutivo": enviar_resumen_ejecutivo,
+    }
     if correo_prueba:
         body["correo_prueba"] = correo_prueba
     if regional:
@@ -241,6 +298,20 @@ def enviar_convocatoria(
     if dia:
         body["dia"] = dia
     return _post("/admin/enviar-convocatoria", body)
+
+
+def enviar_resumen_consolidado(
+    semana: str,
+    modo_prueba: bool,
+    dia: Optional[str] = None,
+    correo_prueba: Optional[str] = None,
+) -> dict | None:
+    body = {"semana": semana, "modo_prueba": modo_prueba}
+    if dia:
+        body["dia"] = dia
+    if correo_prueba:
+        body["correo_prueba"] = correo_prueba
+    return _post("/admin/enviar-resumen-consolidado", body)
 
 
 def get_envios_convocatoria(
@@ -256,6 +327,50 @@ def get_envios_convocatoria(
     if modo_prueba is not None:
         params["modo_prueba"] = modo_prueba
     return _get_admin("/analitica/envios-convocatoria", params) or []
+
+
+def get_emails_enviados(
+    tipo: Optional[str] = None,
+    cedula: Optional[str] = None,
+    modo_prueba: Optional[bool] = None,
+    dia: Optional[str] = None,
+) -> list[dict]:
+    params: dict = {}
+    if tipo:
+        params["tipo"] = tipo
+    if cedula:
+        params["cedula"] = cedula
+    if modo_prueba is not None:
+        params["modo_prueba"] = modo_prueba
+    if dia:
+        params["dia"] = dia
+    return _get_admin("/analitica/emails-enviados", params) or []
+
+
+def get_email_enviado_html(email_id: int) -> bytes | None:
+    return _get_bytes_admin(f"/analitica/emails-enviados/{email_id}/html")
+
+
+def get_emails_enviados_zip(
+    ids: Optional[list[int]] = None,
+    tipo: Optional[str] = None,
+    cedula: Optional[str] = None,
+    modo_prueba: Optional[bool] = None,
+    dia: Optional[str] = None,
+) -> bytes | None:
+    params: dict = {}
+    if ids:
+        params["ids"] = ids  # requests repite el parametro por cada elemento de la lista
+    else:
+        if tipo:
+            params["tipo"] = tipo
+        if cedula:
+            params["cedula"] = cedula
+        if modo_prueba is not None:
+            params["modo_prueba"] = modo_prueba
+        if dia:
+            params["dia"] = dia
+    return _get_bytes_admin("/analitica/emails-enviados/zip", params)
 
 
 def get_cursos(anio: Optional[int] = None, regional: Optional[str] = None) -> list[dict]:
@@ -318,8 +433,16 @@ def resolver_nota(nota_id: int, estado: str) -> dict | None:
     return _patch(f"/admin/notas/{nota_id}/resolver", {"estado": estado})
 
 
+def actualizar_observacion_nota(nota_id: int, observacion: str) -> dict | None:
+    return _patch(f"/admin/notas/{nota_id}/observacion", {"observacion": observacion})
+
+
 def set_convocatoria_habilitada(curso_id: int, habilitada: bool) -> dict | None:
     return _patch(f"/admin/curso/{curso_id}/convocatoria-habilitada", {"habilitada": habilitada})
+
+
+def set_evaluado(curso_id: int, evaluado: bool) -> dict | None:
+    return _patch(f"/admin/curso/{curso_id}/evaluado", {"evaluado": evaluado})
 
 
 def marcar_na(curso_id: int, cedulas: list[str]) -> dict | None:

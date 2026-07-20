@@ -15,6 +15,8 @@ def render_tab_administracion(anio: int) -> None:
     _seccion_convocatoria_por_curso(anio)
     st.divider()
     _seccion_novedades(anio)
+    st.divider()
+    _seccion_observaciones(anio)
 
 
 def _seccion_carga_curso(anio: int) -> None:
@@ -240,7 +242,9 @@ def _seccion_convocatoria_por_curso(anio: int) -> None:
     st.markdown("### 📅 Convocatoria por curso")
     st.caption(
         "Un curso recién cargado no cuenta para Convocatoria hasta que lo actives aquí. "
-        "Los cursos ya cargados antes de esta funcionalidad quedaron activos por defecto."
+        "Los cursos ya cargados antes de esta funcionalidad quedaron activos por defecto. "
+        "\"Evaluado\" desactivado excluye al curso de pendientes de supletorio por completo "
+        "(cursos de solo-asistencia, sin examen — nadie puede reprobar algo que no calificó)."
     )
 
     cursos = api.get_cursos(anio=anio)
@@ -249,14 +253,20 @@ def _seccion_convocatoria_por_curso(anio: int) -> None:
         return
 
     for c in sorted(cursos, key=lambda c: c["nombre"]):
-        col_nombre, col_toggle = st.columns([4, 1])
+        col_nombre, col_conv, col_eval = st.columns([3, 1, 1])
         with col_nombre:
             st.write(f"**{c['nombre']}** — {c['regional_nombre']} ({c['codigo']})")
-        with col_toggle:
+        with col_conv:
             st.toggle(
                 "Convocatoria", value=c["convocatoria_habilitada"],
-                key=f"conv_hab_{c['id']}", label_visibility="collapsed",
+                key=f"conv_hab_{c['id']}", label_visibility="visible",
                 on_change=_on_toggle_convocatoria_habilitada, args=(c["id"],),
+            )
+        with col_eval:
+            st.toggle(
+                "Evaluado", value=c["evaluado"],
+                key=f"eval_{c['id']}", label_visibility="visible",
+                on_change=_on_toggle_evaluado, args=(c["id"],),
             )
 
 
@@ -265,6 +275,13 @@ def _on_toggle_convocatoria_habilitada(curso_id: int) -> None:
     resultado = api.set_convocatoria_habilitada(curso_id, habilitada)
     if not resultado:
         st.error("No se pudo actualizar el estado de convocatoria. Intenta de nuevo.")
+
+
+def _on_toggle_evaluado(curso_id: int) -> None:
+    evaluado = st.session_state[f"eval_{curso_id}"]
+    resultado = api.set_evaluado(curso_id, evaluado)
+    if not resultado:
+        st.error("No se pudo actualizar el estado de evaluado. Intenta de nuevo.")
 
 
 _ESTADOS_RESOLUCION = {
@@ -361,4 +378,37 @@ def _tabla_pendientes_resolver(personas: list[dict]) -> None:
                 resultado = api.resolver_nota(p["nota_id"], estado)
                 if resultado:
                     st.success(f"{p['nombre']} → {etiqueta}")
+                    st.rerun()
+
+
+def _seccion_observaciones(anio: int) -> None:
+    st.markdown("### 📝 Observaciones de notas")
+    st.caption(
+        "Busca por cédula y agrega o edita una observación libre en cualquiera de sus notas "
+        f"del año {anio} — para dejar contexto sobre un caso puntual (no cambia el estado ni la nota)."
+    )
+
+    cedula = st.text_input("Cédula del colaborador", key="obs_cedula", placeholder="Ej: 1712345678")
+    if not cedula.strip():
+        return
+
+    with st.spinner("Buscando…"):
+        notas = api.get_notas_empleado(cedula.strip(), anio=anio)
+
+    if not notas:
+        st.info("Sin notas para esta cédula en este año, o cédula no encontrada.")
+        return
+
+    for n in sorted(notas, key=lambda x: x["curso_nombre"]):
+        nota_txt = f" ({n['valor']})" if n["valor"] is not None else ""
+        with st.expander(f"{n['curso_nombre']} — {n['estado']}{nota_txt}"):
+            nueva_obs = st.text_area(
+                "Observación", value=n["observacion"] or "", key=f"obs_text_{n['id']}",
+                placeholder="Sin observación…",
+            )
+            if st.button("Guardar", key=f"obs_btn_{n['id']}"):
+                resultado = api.actualizar_observacion_nota(n["id"], nueva_obs)
+                if resultado:
+                    api.get_notas_empleado.clear()  # el cache de 15 min no debe mostrar la version vieja
+                    st.success("Observación guardada.")
                     st.rerun()

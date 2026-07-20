@@ -7,6 +7,10 @@ import streamlit as st
 import api_client as api
 
 DIAS = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"]
+# Solo para el selector de Convocatoria: "Virtual" no es un dia (sede=Virtual
+# siempre tiene dia=None, disponible toda la semana) — se agrega aca nada mas
+# porque es la unica forma de que esa gente aparezca en el preview/envio.
+DIAS_CONVOCATORIA = DIAS + ["VIRTUAL"]
 
 
 def _lunes_de_semana(d: date) -> date:
@@ -52,9 +56,20 @@ def render_tab_convocatoria(anio: int) -> None:
     with fc1:
         regional = st.selectbox("Regional", ["TS R2", "Quito"], key="conv_regional")
     with fc2:
-        dia = st.selectbox("Día", DIAS, key="conv_dia")
+        dia = st.selectbox(
+            "Día", DIAS_CONVOCATORIA, key="conv_dia",
+            help="'Virtual' agrupa a quienes tienen esa modalidad — están disponibles toda la "
+                 "semana, no un día fijo.",
+        )
     with fc3:
-        semana_sel = st.date_input("Semana", value=date.today(), key="conv_semana")
+        # default = lunes de LA PROXIMA semana, nunca "hoy" — un default de
+        # "hoy" hace que si nadie toca este campo, la convocatoria salga con
+        # fechas de la semana actual (o incluso de hoy mismo) en vez de una
+        # fecha futura para que la gente se prepare. Bug real: paso una vez.
+        semana_sel = st.date_input(
+            "Semana", value=_lunes_de_semana(date.today()) + timedelta(days=7), key="conv_semana",
+            help="Por defecto es la PRÓXIMA semana, no la actual — revisa la fecha antes de enviar.",
+        )
 
     semana_inicio = _lunes_de_semana(semana_sel)
     anio_efectivo = semana_inicio.year
@@ -90,7 +105,11 @@ def render_tab_convocatoria(anio: int) -> None:
     st.divider()
     _seccion_envio(preview, semana_inicio, seleccionados, regional, dia)
     st.divider()
+    _seccion_resumen_consolidado(semana_inicio, dia)
+    st.divider()
     _seccion_historial_envios(anio_efectivo, regional)
+    st.divider()
+    _seccion_emails_archivados()
 
 
 def _seccion_tabla_convocados(preview: list[dict], dia: str) -> list[str]:
@@ -181,6 +200,13 @@ def _seccion_envio(
         st.info("No hay convocados cargados para enviar.")
         return
 
+    semana_fin = semana_inicio + timedelta(days=4)
+    st.warning(
+        f"📅 Esta convocatoria se enviará con fecha de la semana del "
+        f"**{semana_inicio.strftime('%d/%m/%Y')} al {semana_fin.strftime('%d/%m/%Y')}** "
+        f"— verifica que sea la semana correcta antes de confirmar el envío."
+    )
+
     st.caption(f"{len(cedulas_seleccionadas)} seleccionados en la columna 'Enviar' de la tabla de arriba.")
 
     modo_prueba = st.toggle("Modo prueba", value=True,
@@ -188,6 +214,14 @@ def _seccion_envio(
     correo_prueba = None
     if modo_prueba:
         correo_prueba = st.text_input("Correo de prueba", placeholder="tu_correo@telconet.ec")
+
+    enviar_resumen_ejecutivo = st.checkbox(
+        "Enviar resumen ejecutivo individual a coordinadores",
+        value=False,
+        help="Déjalo desactivado si vas a usar 'Enviar resumen consolidado' (recomendado) más "
+             "abajo después de enviar Quito y TS R2 — activarlo aquí también duplica el aviso "
+             "a la jefatura.",
+    )
 
     if st.button(f"Confirmar y enviar a los {len(cedulas_seleccionadas)} seleccionados", type="primary"):
         if not cedulas_seleccionadas:
@@ -205,6 +239,7 @@ def _seccion_envio(
                 correo_prueba=correo_prueba,
                 regional=regional,
                 dia=dia,
+                enviar_resumen_ejecutivo=enviar_resumen_ejecutivo,
             )
 
         if resultado:
@@ -218,6 +253,51 @@ def _seccion_envio(
                 st.caption(f"📋 Recopilatorio enviado a {len(resultado['recopilatorios_enviados'])} jefe(s) inmediato(s).")
             if resultado.get("resumen_ejecutivo_enviado"):
                 st.caption("📊 Resumen ejecutivo enviado a los coordinadores.")
+
+
+def _seccion_resumen_consolidado(semana_inicio: date, dia: str) -> None:
+    st.markdown("### 📊 Enviar resumen consolidado a la jefatura")
+    st.caption(
+        "Un solo correo a la jefatura con dos secciones — UIO (Quito) y TS R2 — agregando "
+        "los envíos ya hechos esa semana. Úsalo una sola vez, después de haber enviado Quito "
+        "y TS R2 por separado (con 'Enviar resumen ejecutivo individual' desactivado arriba)."
+    )
+    semana_fin_c = semana_inicio + timedelta(days=4)
+    st.caption(
+        f"📅 Semana: **{semana_inicio.strftime('%d/%m/%Y')} al {semana_fin_c.strftime('%d/%m/%Y')}** "
+        "— debe ser la misma semana que usaste en los envíos de arriba."
+    )
+
+    modo_prueba_c = st.toggle(
+        "Modo prueba", value=True, key="conv_consolidado_modo_prueba",
+        help="Mientras esté activo, el correo se redirige al correo de prueba.",
+    )
+    correo_prueba_c = None
+    if modo_prueba_c:
+        correo_prueba_c = st.text_input(
+            "Correo de prueba", key="conv_consolidado_correo_prueba",
+            placeholder="tu_correo@telconet.ec",
+        )
+
+    if st.button("Enviar resumen consolidado", key="conv_consolidado_btn"):
+        if modo_prueba_c and not correo_prueba_c:
+            st.error("Ingresa un correo de prueba mientras el modo prueba esté activo.")
+            return
+
+        with st.spinner("Enviando resumen consolidado…"):
+            resultado = api.enviar_resumen_consolidado(
+                semana=semana_inicio.isoformat(),
+                dia=dia,
+                modo_prueba=modo_prueba_c,
+                correo_prueba=correo_prueba_c,
+            )
+
+        if resultado:
+            sufijo = " (modo prueba — redirigido a correo de prueba)" if modo_prueba_c else ""
+            st.success(
+                f"✅ Resumen consolidado enviado{sufijo}: "
+                f"{resultado['quito_count']} de Quito, {resultado['ts_r2_count']} de TS R2."
+            )
 
 
 def _seccion_historial_envios(anio: int, regional: str) -> None:
@@ -264,3 +344,129 @@ def _seccion_historial_envios(anio: int, regional: str) -> None:
         "Enviado por": h["enviado_por"] or "—",
     } for h in historial])
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+_TIPOS_EMAIL = ["INDIVIDUAL", "RECOPILATORIO", "RESUMEN_EJECUTIVO", "RESUMEN_CONSOLIDADO"]
+
+
+def _nombre_archivo_email(email: dict) -> str:
+    """Espeja el nombre que arma el backend (apellidos y nombres del
+    colaborador cuando el correo esta ligado a uno; si no, el tipo)."""
+    import re
+    base = email["empleado_nombre"] or email["tipo"]
+    limpio = re.sub(r'[\\/:*?"<>|]', "", base).strip()
+    slug = re.sub(r"\s+", "_", limpio)
+    return f"{slug}_{email['tipo']}_{email['id']}.html"
+
+
+def _seccion_emails_archivados() -> None:
+    st.markdown("### 📬 Correos archivados")
+    st.caption(
+        "El contenido HTML real de cada correo que el sistema ya envió — individual a "
+        "colaborador, recopilatorio a jefe, y resúmenes ejecutivo/consolidado. Búscalo y "
+        "descárgalo (uno o varios a la vez) para ver exactamente qué se mandó."
+    )
+
+    ef1, ef2, ef3, ef4 = st.columns(4)
+    with ef1:
+        filtro_tipo = st.selectbox("Tipo", ["Todos"] + _TIPOS_EMAIL, key="conv_email_tipo")
+    with ef2:
+        filtro_dia = st.selectbox("Día", ["Todos"] + DIAS, key="conv_email_dia")
+    with ef3:
+        filtro_cedula = st.text_input(
+            "Cédula (opcional)", key="conv_email_cedula",
+            placeholder="Solo aplica a tipo Individual",
+        )
+    with ef4:
+        filtro_modo = st.selectbox(
+            "Modo", ["Todos", "Solo reales", "Solo prueba"], key="conv_email_modo",
+        )
+
+    if not st.checkbox("Mostrar correos archivados", key="conv_email_mostrar"):
+        return
+
+    modo_prueba_filtro = None
+    if filtro_modo == "Solo reales":
+        modo_prueba_filtro = False
+    elif filtro_modo == "Solo prueba":
+        modo_prueba_filtro = True
+    tipo_filtro = None if filtro_tipo == "Todos" else filtro_tipo
+    dia_filtro = None if filtro_dia == "Todos" else filtro_dia
+    cedula_filtro = filtro_cedula.strip() or None
+
+    with st.spinner("Cargando correos archivados…"):
+        emails = api.get_emails_enviados(
+            tipo=tipo_filtro, cedula=cedula_filtro, modo_prueba=modo_prueba_filtro, dia=dia_filtro,
+        )
+
+    if not emails:
+        st.info("Sin correos archivados para estos filtros.")
+        return
+
+    st.caption(f"{len(emails)} correo(s) encontrados.")
+    df = pd.DataFrame([{
+        "Seleccionar": False,
+        "Fecha":      e["fecha_envio"],
+        "Tipo":       e["tipo"],
+        "Día":        e["dia"] or "—",
+        "Nombre":     e["empleado_nombre"] or "—",
+        "Cédula":     e["empleado_cedula"] or "—",
+        "Destino":    e["destino"],
+        "Asunto":     e["asunto"],
+        "Modo":       "🧪 Prueba" if e["modo_prueba"] else "✅ Real",
+        "id":         e["id"],
+    } for e in emails])
+
+    edited = st.data_editor(
+        df,
+        key="conv_email_editor",
+        use_container_width=True,
+        hide_index=True,
+        disabled=["Fecha", "Tipo", "Día", "Nombre", "Cédula", "Destino", "Asunto", "Modo"],
+        column_config={
+            "Seleccionar": st.column_config.CheckboxColumn("Seleccionar"),
+            "id": None,  # oculta la columna id, solo se usa internamente
+        },
+    )
+    ids_seleccionados = edited[edited["Seleccionar"]]["id"].tolist()
+
+    bd1, bd2 = st.columns(2)
+    with bd1:
+        if st.button(f"⬇️ Descargar seleccionados ({len(ids_seleccionados)})", disabled=not ids_seleccionados):
+            if len(ids_seleccionados) == 1:
+                with st.spinner("Preparando descarga…"):
+                    html_contenido = api.get_email_enviado_html(ids_seleccionados[0])
+                if html_contenido:
+                    email_sel = next(e for e in emails if e["id"] == ids_seleccionados[0])
+                    st.download_button(
+                        label=f"⬇️ Descargar correo de {email_sel['empleado_nombre'] or email_sel['tipo']} (.html)",
+                        data=html_contenido, file_name=_nombre_archivo_email(email_sel),
+                        mime="text/html", key="conv_email_download_individual",
+                    )
+                else:
+                    st.info("No se pudo descargar ese correo.")
+            else:
+                with st.spinner("Preparando descarga…"):
+                    zip_contenido = api.get_emails_enviados_zip(ids=ids_seleccionados)
+                if zip_contenido:
+                    st.download_button(
+                        label=f"⬇️ Descargar {len(ids_seleccionados)} correos (.zip)",
+                        data=zip_contenido, file_name="correos_seleccionados.zip",
+                        mime="application/zip", key="conv_email_download_zip_seleccionados",
+                    )
+                else:
+                    st.info("No se pudo generar la descarga.")
+    with bd2:
+        if st.button(f"⬇️ Descargar todos los filtrados ({len(emails)})"):
+            with st.spinner("Preparando descarga…"):
+                zip_contenido = api.get_emails_enviados_zip(
+                    tipo=tipo_filtro, cedula=cedula_filtro, modo_prueba=modo_prueba_filtro, dia=dia_filtro,
+                )
+            if zip_contenido:
+                st.download_button(
+                    label=f"⬇️ Descargar {len(emails)} correos filtrados (.zip)",
+                    data=zip_contenido, file_name="correos_archivados_filtrados.zip",
+                    mime="application/zip", key="conv_email_download_zip_filtrados",
+                )
+            else:
+                st.info("No se pudo generar la descarga.")
