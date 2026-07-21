@@ -407,6 +407,7 @@ def cargar_curso(
     regional: Optional[str] = None,
     curso_id: Optional[int] = None,
     convocatoria: Optional[int] = None,
+    url_telcou: Optional[str] = None,
 ) -> dict | None:
     params: dict = {"modo": modo}
     if modo == "nuevo":
@@ -415,6 +416,8 @@ def cargar_curso(
             "fecha_inicio": fecha_inicio, "fecha_fin": fecha_fin,
             "anio": anio, "regional": regional,
         })
+        if url_telcou:
+            params["url_telcou"] = url_telcou
     else:
         params.update({"curso_id": curso_id, "convocatoria": convocatoria})
     files = {"archivo": (nombre_archivo, archivo_bytes, "text/csv")}

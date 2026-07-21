@@ -47,6 +47,10 @@ def _seccion_carga_curso(anio: int) -> None:
             metadata["fecha_inicio"] = st.date_input("Fecha inicio", key="admin_fecha_inicio")
         with c5:
             metadata["fecha_fin"] = st.date_input("Fecha fin", key="admin_fecha_fin")
+        metadata["url_telcou"] = st.text_input(
+            "Link de Moodle (opcional)", key="admin_link_moodle",
+            placeholder="https://www.telcou.ec/course/view.php?id=...",
+        )
     else:
         cursos = api.get_cursos(anio=anio)
         opciones = {f"{c['nombre']} — {c['regional_nombre']} ({c['codigo']})": c["id"] for c in cursos}
@@ -71,7 +75,7 @@ def _seccion_carga_curso(anio: int) -> None:
                     codigo=metadata["codigo"], nombre=metadata["nombre"], tipo=metadata["tipo"],
                     mes=metadata["mes"], fecha_inicio=metadata["fecha_inicio"].isoformat(),
                     fecha_fin=metadata["fecha_fin"].isoformat(), anio=int(metadata["anio"]),
-                    regional=metadata["regional"],
+                    regional=metadata["regional"], url_telcou=metadata["url_telcou"] or None,
                 )
             else:
                 kwargs.update(curso_id=metadata["curso_id"], convocatoria=int(metadata["convocatoria"]))
