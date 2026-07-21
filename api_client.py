@@ -246,6 +246,18 @@ def get_reporte_calificaciones_html(anio: int, regional: Optional[str] = None) -
     return _get_bytes("/analitica/reporte-calificaciones-html", params)
 
 
+def get_reporte_calificaciones_macro_excel(
+    anio: int, mes_desde: Optional[str] = None, mes_hasta: Optional[str] = None,
+    combinado: bool = False,
+) -> bytes | None:
+    params = {"anio": anio, "combinado": combinado}
+    if mes_desde:
+        params["mes_desde"] = mes_desde
+    if mes_hasta:
+        params["mes_hasta"] = mes_hasta
+    return _get_bytes("/analitica/reporte-calificaciones-macro", params)
+
+
 def get_regional_dia_configurado(regional: str) -> bool:
     resultado = _get("/analitica/regional-dia-configurado", {"regional": regional})
     return bool(resultado and resultado.get("configurado"))
