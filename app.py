@@ -42,11 +42,19 @@ with st.sidebar:
 st.title("📊 Dashboard Capacitación Técnica TELCOU")
 
 # ── Selector de año (arriba del contenido) ──
+# Colaboradores tiene su propio filtro de año dentro del formulario de
+# búsqueda (colaborador primero, año después) — mostrar el selector global
+# ahí también sería redundante y confuso, ya que no controla nada en esa
+# pestaña una vez aplicado el filtro local.
 AÑOS_DISPONIBLES = [2026, 2025, 2024, 2023]
-anio = st.radio(
-    "Año", options=AÑOS_DISPONIBLES, horizontal=True, label_visibility="collapsed",
-)
-st.caption(f"Año **{anio}** · Datos en tiempo real desde telcou-api")
+if seccion == "👥 Colaboradores":
+    anio = AÑOS_DISPONIBLES[0]
+    st.caption("👥 Colaboradores tiene su propio filtro de año, dentro del formulario de búsqueda.")
+else:
+    anio = st.radio(
+        "Año", options=AÑOS_DISPONIBLES, horizontal=True, label_visibility="collapsed",
+    )
+    st.caption(f"Año **{anio}** · Datos en tiempo real desde telcou-api")
 
 st.divider()
 
