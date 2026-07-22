@@ -9,6 +9,10 @@ MESES = [
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ]
 
+# Mantener en sync con AÑOS_DISPONIBLES de app.py — no se importa directo para
+# evitar un ciclo de imports (app.py ya importa render_tab_colaboradores).
+AÑOS_DISPONIBLES = [2026, 2025, 2024, 2023]
+
 ESTADOS_INASISTENCIA = {"FALTA_INJUSTIFICADA", "FALTA_JUSTIFICADA", "VACACIONES"}
 NECESITA_SUPLETORIO = {"REPROBADO", "FALTA_INJUSTIFICADA"}
 
@@ -21,7 +25,10 @@ ESTADO_TIPO_LABEL = {
 
 def render_tab_colaboradores(anio: int) -> None:
     with st.spinner("Cargando empleados..."):
-        empleados = api.get_empleados(anio=anio)
+        # Sin filtro de año — primero eliges a la persona, el año se elige
+        # despues (si se filtrara por año aca, alguien sin notas en el año
+        # activo del sidebar ni siquiera aparecería para buscarlo).
+        empleados = api.get_empleados()
 
     if not empleados:
         st.warning("No se encontraron empleados. Verifica que telcou-api esté corriendo.")
@@ -30,14 +37,16 @@ def render_tab_colaboradores(anio: int) -> None:
     nombres = sorted({e["nombre"] for e in empleados if e.get("nombre")})
 
     with st.form("form_colab"):
-        c1, c2 = st.columns([3, 1])
+        seleccion = st.multiselect(
+            "Colaborador(es) — escribe para filtrar",
+            options=nombres,
+            default=[],
+            placeholder="Empieza a escribir…",
+        )
+        c1, c2 = st.columns([1, 3])
         with c1:
-            seleccion = st.multiselect(
-                "Colaborador(es) — escribe para filtrar",
-                options=nombres,
-                default=[],
-                placeholder="Empieza a escribir…",
-            )
+            indice_default = AÑOS_DISPONIBLES.index(anio) if anio in AÑOS_DISPONIBLES else 0
+            anio_sel = st.selectbox("Año", options=AÑOS_DISPONIBLES, index=indice_default)
         with c2:
             meses_sel = st.multiselect("Mes(es)", options=MESES, default=MESES)
         st.form_submit_button("Aplicar", use_container_width=True)
@@ -53,7 +62,7 @@ def render_tab_colaboradores(anio: int) -> None:
         if not emp:
             st.warning(f"No encontrado: {nombre}")
             continue
-        _render_empleado(emp, anio, meses_sel)
+        _render_empleado(emp, anio_sel, meses_sel)
         st.divider()
 
 
