@@ -93,13 +93,14 @@ def _render_empleado(emp: dict, anio: int, meses_sel: list[str]) -> None:
         resumen = api.get_resumen_empleado(cedula, anio)
 
     if resumen:
-        m1, m2, m3, m4, m5 = st.columns(5)
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
         prom = resumen.get("promedio")
         m1.metric("Total Capacitaciones", resumen.get("total_capacitaciones", 0))
         m2.metric("Promedio", f"{float(prom):.2f}" if prom is not None else "—")
         m3.metric("Faltas (F)", resumen.get("faltas_injustificadas", 0))
         m4.metric("Justificadas (J)", resumen.get("faltas_justificadas", 0))
-        m5.metric("Supletorios Rendidos", resumen.get("supletorios", 0))
+        m5.metric("Vacaciones (V)", resumen.get("vacaciones", 0))
+        m6.metric("Supletorios Rendidos", resumen.get("supletorios", 0))
 
     # ── Notas del período ──
     with st.spinner("Cargando notas..."):
