@@ -83,6 +83,10 @@ def _seccion_carga_curso(anio: int) -> None:
             resultado = api.cargar_curso(archivo.getvalue(), archivo.name, **kwargs)
 
         if resultado:
+            # el cache de 15 min no debe mostrar cursos/notas/pendientes desactualizados
+            api.get_listado_cursos.clear()
+            api.get_notas_empleado.clear()
+            api.get_supletorios_pendientes.clear()
             st.session_state["admin_ultimo_resultado"] = resultado
             st.session_state["admin_ultimo_resultado_modo"] = modo
 
@@ -135,6 +139,7 @@ def _form_alta_empleado(persona: dict, regional_sugerida: str) -> None:
                 }
                 resultado = api.crear_empleado(payload)
                 if resultado:
+                    api.get_empleados.clear()  # el cache de 15 min no debe ocultar al empleado recien creado
                     st.success(f"Empleado {resultado['nombre']} creado. Vuelve a cargar el mismo CSV para registrar su nota.")
                     ultimo = st.session_state.get("admin_ultimo_resultado")
                     if ultimo and ultimo.get("sin_match"):
@@ -236,6 +241,9 @@ def _seccion_marcar_na(curso_id: int) -> None:
             resultado = api.marcar_na(curso_id, seleccionadas)
 
         if resultado:
+            # el cache de 15 min no debe seguir mostrando estas notas como pendientes
+            api.get_notas_empleado.clear()
+            api.get_supletorios_pendientes.clear()
             st.success(f"✅ Marcados como NA: {len(resultado['marcados'])}")
             st.session_state.pop(marcadas_key, None)
             st.session_state.pop(version_key, None)
@@ -277,14 +285,20 @@ def _seccion_convocatoria_por_curso(anio: int) -> None:
 def _on_toggle_convocatoria_habilitada(curso_id: int) -> None:
     habilitada = st.session_state[f"conv_hab_{curso_id}"]
     resultado = api.set_convocatoria_habilitada(curso_id, habilitada)
-    if not resultado:
+    if resultado:
+        # el cache de 15 min no debe seguir mostrando el estado viejo de convocatoria
+        api.get_listado_cursos.clear()
+        api.get_supletorios_pendientes.clear()
+    else:
         st.error("No se pudo actualizar el estado de convocatoria. Intenta de nuevo.")
 
 
 def _on_toggle_evaluado(curso_id: int) -> None:
     evaluado = st.session_state[f"eval_{curso_id}"]
     resultado = api.set_evaluado(curso_id, evaluado)
-    if not resultado:
+    if resultado:
+        api.get_supletorios_pendientes.clear()  # "evaluado" afecta directamente quien cuenta como pendiente
+    else:
         st.error("No se pudo actualizar el estado de evaluado. Intenta de nuevo.")
 
 
@@ -356,6 +370,9 @@ def _tabla_sin_notificar(curso_id: int, personas: list[dict]) -> None:
             resultado = api.enviar_novedad(curso_id, seleccionadas, modo_prueba, correo_prueba)
 
         if resultado:
+            # el cache de 15 min no debe seguir mostrando a esta gente como "sin notificar"
+            api.get_notas_empleado.clear()
+            api.get_supletorios_pendientes.clear()
             sufijo = " (modo prueba)" if modo_prueba else ""
             st.success(f"✅ Notificados: {len(resultado['notificados'])}{sufijo} · Correos a jefes: {len(resultado['recopilatorios_enviados'])}")
             st.rerun()
@@ -381,6 +398,9 @@ def _tabla_pendientes_resolver(personas: list[dict]) -> None:
                 estado = _ESTADOS_RESOLUCION[etiqueta]
                 resultado = api.resolver_nota(p["nota_id"], estado)
                 if resultado:
+                    # el cache de 15 min no debe seguir mostrando el estado viejo de esta nota
+                    api.get_notas_empleado.clear()
+                    api.get_supletorios_pendientes.clear()
                     st.success(f"{p['nombre']} → {etiqueta}")
                     st.rerun()
 
