@@ -57,11 +57,21 @@ Donde antes estaban las tabs (arriba del título) ahora está el **selector de A
 ### 👥 Colaboradores
 Busca empleados por nombre. Para cada uno muestra:
 - Datos personales (área, jefe, regional, estado activo/inactivo)
-- Métricas: total capacitaciones, promedio, faltas, **Supletorios Rendidos** (renombrado 2026-07-09 — antes decía solo "Supletorios" y se prestaba a confusión con los pendientes)
+- Métricas: total capacitaciones, promedio, faltas, justificadas, **Vacaciones (V)** (nueva — 2026-07-22, ver más abajo), **Supletorios Rendidos** (renombrado 2026-07-09 — antes decía solo "Supletorios" y se prestaba a confusión con los pendientes)
 - Inasistencias y vacaciones (tabla coloreada)
 - **Trazabilidad de supletorios** (tabla horizontal) — solo muestra cursos donde **ya se intentó** un supletorio
 - **Pendientes de Supletorio** (nuevo — 2026-07-09) — cursos reprobados/falta injustificada donde **todavía no se ha rendido ningún** supletorio (calculado en el cliente a partir de las notas ya cargadas, sin llamada extra a la API). Antes esto no se mostraba en ningún lado de esta tab, dando la falsa impresión de que el empleado no tenía nada pendiente
 - Todas las notas regulares del período (expander)
+
+**Métrica "Vacaciones (V)" (nuevo — 2026-07-22).** El conteo de notas `VACACIONES` no aparecía en la fila de métricas — solo se veía dentro de la tabla "Inasistencias y Vacaciones". Backend: `calcular_resumen_empleado()` (`app/services/calculadora.py`) y `EmpleadoResumenOut` ahora exponen `vacaciones`, mismo criterio que `faltas_injustificadas`/`faltas_justificadas` (cuenta solo notas `REGULAR`). Aplica para cualquier año.
+
+**Reordenar selectores — colaborador primero, año después (rama `feature/colaboradores-orden-selector`, aún NO mergeada a `main` — pendiente de aprobación final del usuario, 2026-07-22).** A pedido del usuario, la búsqueda de colaboradores dejó de depender del año activo en el sidebar (antes `api.get_empleados(anio=anio)` hacía que alguien sin notas ese año directamente no apareciera para buscarlo — problema real si la persona recién ingresó o dejó la empresa en otro año). Cambios en la rama:
+- `api.get_empleados()` sin filtro de año — la lista de nombres es siempre completa.
+- Nuevo selector **"Año"** (un solo valor, no multiselección) dentro del propio formulario de la pestaña, ubicado *después* del campo de colaborador — así el flujo real es "elijo a quién, después elijo cuándo".
+- El selector de año global del sidebar se **oculta** cuando la pestaña activa es Colaboradores (en `app.py`), con un aviso explícito de que el filtro real vive dentro del formulario — quedaba visible pero sin ningún efecto una vez agregado el selector local, lo cual era confuso.
+- **Intentada y descartada (rama `feature/colaboradores-multi-anio`, no mergeada, se deja sin borrar por si se retoma):** una primera versión permitía seleccionar varios años a la vez y mostraba una tabla resumen + un `expander` colapsado por año con el detalle completo. El usuario la rechazó por sentirse "muy apilada" incluso con el detalle colapsado — prefiere la tarjeta de un único año tal como estaba, solo con el orden de selectores invertido.
+
+**Fix: "0 por copia" no contaba como pendiente de supletorio (2026-07-22).** `NECESITA_SUPLETORIO` (usado por la sección "Pendientes de Supletorio" de esta pantalla, definido localmente en `ui/colaboradores.py`) nunca incluyó el estado `COPIA` — una nota de 0.00 por sanción de copia, tan reprobatoria como cualquier `REPROBADO`. Caso real que destapó el bug: **ESCOBAR GAME ELIAS IVAN** tenía 3 notas `COPIA` (mismo período, 30 abril–5 mayo 2026) invisibles en Pendientes. Corregido — mismo fix aplicado también en el backend (`app/services/convocatoria.py`, ver abajo). Investigación en la BD real (2026, activos, sin supletorio rendido): 4 colaboradores afectados en total (Escobar Game ×3 cursos + Minga Morocho, Guevara Gómez, Guerrero Ramírez ×1 curso c/u), todos Quito, todos con día JUEVES o VIERNES — ninguno en Lunes/Martes/Miércoles. Verificado que, con el fix, ya aparecen correctamente en `convocatoria-preview` listos para ser convocados.
 
 ### 📈 Analítica
 - **% Aprobados global (fix 2026-07-01):** el header mostraba 68.5% vs el 85.7% real de la tabla principal, porque el denominador incluía NUEVO/CAMBIO/SALIO (empleados no convocados a ese curso). Ahora `convocados = total - na` en ambos lados y coinciden
