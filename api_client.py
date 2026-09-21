@@ -10,8 +10,9 @@ def _base() -> str:
 
 
 def _get(path: str, params: dict = None) -> list | dict | None:
+    headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
     try:
-        r = requests.get(f"{_base()}{path}", params=params, timeout=30)
+        r = requests.get(f"{_base()}{path}", params=params, headers=headers, timeout=30)
         r.raise_for_status()
         return r.json()
     except requests.exceptions.ConnectionError:
@@ -45,8 +46,9 @@ def _get_admin(path: str, params: dict = None) -> list | dict | None:
 
 
 def _get_bytes(path: str, params: dict = None) -> bytes | None:
+    headers = {"X-Admin-Token": st.secrets.get("ADMIN_TOKEN", "")}
     try:
-        r = requests.get(f"{_base()}{path}", params=params, timeout=60)
+        r = requests.get(f"{_base()}{path}", params=params, headers=headers, timeout=60)
         r.raise_for_status()
         return r.content
     except requests.exceptions.ConnectionError:
