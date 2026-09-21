@@ -408,10 +408,13 @@ def render_tab_analitica(anio: int) -> None:
         )
 
     if pendientes:
+        # "0" solo significa que no hay ningún supletorio registrado para ese
+        # curso — no prueba que la persona nunca lo haya rendido, solo que no
+        # está registrado en el sistema.
         INTENTO_LABEL = {
-            0: "Nunca rindió supletorio",
-            1: "Reprobó Intento 1 (falta Intento 2)",
-            2: "Reprobó Intento 2",
+            0: "Pendiente (sin intento registrado)",
+            1: "Pendiente (reprobó Intento 1)",
+            2: "Pendiente (reprobó Intento 2)",
         }
         rows_det = [{
             "Cédula":        p["cedula"],
