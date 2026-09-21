@@ -1,0 +1,12 @@
+.venv
+venv
+__pycache__
+*.pyc
+.git
+.env
+.streamlit/secrets.toml
+secrets_TEMPLATE.toml
+docs
+.claude
+.superpowers
+.devcontainer
